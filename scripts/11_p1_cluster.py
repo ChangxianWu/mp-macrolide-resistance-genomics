@@ -1,0 +1,241 @@
+# -*- coding: utf-8 -*-
+"""11_p1_cluster.py — P1 分歧谱系自聚类定名
+输入: ../data/fasta/*.fna + reference/U00089.2.embl.cache.txt（M129 SQ）
+      + reference/CP010546.embl.cache.txt（FH SQ）+ reference/p1_panel_ncbi.fasta（PHOL panel）
+输出: ../results/MY9_P1聚类.tsv + results/MY9_P1聚类摘要.md
+
+方法:
+  1) 提取: M129 P1 采样 20-mer（每 25 nt, ~195 个）在每株定位命中位置;
+     命中 ≥10 → 窗口 = [min(pos)-500, max(pos)+20+500]（P1 邻域, 无需精确边界; 20-mer 对拼接顺序不敏感）
+  2) 聚类: 提取窗口 20-mer 全对 Jaccard, 单连锁; 阈值取直方图谷区（脚本打印, 默认 0.5）
+  3) 定名: 含 M129-P1 的簇 = type1; 含 FH-P1 = type2; 含 PHOL 成员 = phol; 其余 = div-A/B/…
+  4) 簇级统计: n / 国家 / 年份段 / ST / 23S 耐药率（join MY9_分型矩阵.tsv）
+"""
+import csv, glob, itertools, json, os, re, collections
+
+BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+RESDIR = os.path.join(BASE, "results")
+REFDIR = os.path.join(BASE, "reference")
+K = 20
+SAMPLE_STEP = 25
+MIN_HITS = 10
+JAC_T = 0.5
+
+def embl_sq_seq(embl):
+    body = embl.split("SQ   ", 1)[1].split("//", 1)[0]
+    return "".join(re.findall(r"[A-Za-z]+", " ".join(body.splitlines()[1:]))).upper()
+
+def fseq(path):
+    return "".join(l.strip() for l in open(path) if not l.startswith(">")).upper()
+
+_RC = str.maketrans("ACGTNacgtn", "TGCANtgcan")
+def kmers(seq, k=K):
+    """canonical k-mer 集（链不变）"""
+    out = set()
+    for i in range(len(seq) - k + 1):
+        x = seq[i:i+k]
+        if "N" not in x:
+            out.add(min(x, x.translate(_RC)[::-1]))
+    return out
+
+# --- 参考 P1 ---
+embl129 = open(os.path.join(REFDIR, "U00089.2.embl.cache.txt"), encoding="utf-8").read()
+g129 = embl_sq_seq(embl129)
+p1_m129 = g129[180857:185741]
+samps = [p1_m129[i:i+K] for i in range(0, len(p1_m129) - K + 1, SAMPLE_STEP)]
+samps = [s for s in samps if "N" not in s]
+print(f"anchor samples from M129 P1: {len(samps)}", flush=True)
+
+embl_fh = open(os.path.join(REFDIR, "CP010546.embl.cache.txt"), encoding="utf-8").read()
+fh = embl_sq_seq(embl_fh)   # EMBL SQ 块解析（fseq 会把注释文本当序列——勿用）
+p1_fh = fh[179323:184228]
+assert p1_fh.startswith("ATG"), "FH P1 切片异常"
+
+panel = {}
+if os.path.exists(os.path.join(REFDIR, "p1_panel_ncbi.fasta")):
+    name = None
+    for ln in open(os.path.join(REFDIR, "p1_panel_ncbi.fasta")):
+        if ln.startswith(">"):
+            name = ln[1:].strip().split()[0]
+            panel[name] = []
+        elif name:
+            panel[name].append(ln.strip())
+    panel = {k: "".join(v).upper() for k, v in panel.items()}
+print(f"PHOL panel members: {len(panel)}", flush=True)
+
+# --- 提取 ---
+meta = {}
+pool = {}
+with open(os.path.join(BASE, "MY9_入组池_基因组元数据.csv"), encoding="utf-8-sig") as f:
+    for r in csv.DictReader(f):
+        pool[r["assembly_accession"]] = r
+with open(os.path.join(BASE, "MY9_下载清单.csv"), encoding="utf-8-sig") as f:
+    for r in csv.DictReader(f):
+        rec = pool.get(r["assembly_accession"])
+        if rec:
+            meta[r["ena_acc"]] = rec
+
+files = sorted(glob.glob(os.path.join(BASE, "data", "fasta", "*.fna")))
+windows = {}   # key -> (seq, n_anchor_hits)
+fails = []
+for k, path in enumerate(files, 1):
+    acc = os.path.basename(path).replace(".fna", "")
+    g = fseq(path)
+    gr = g.translate(_RC)[::-1]
+    if sum(1 for s in samps if s in gr) > sum(1 for s in samps if s in g):
+        g = gr                            # 反向 contig 基因组: 用 rc 链提取
+    hits = sorted(p for p in (g.find(s) for s in samps) if p >= 0)
+    # 命中链: 相邻间距 ≤2000 nt 的最大链（field 株可有额外 RepMP 拷贝造成远端散点命中）
+    best_chain = []
+    if hits:
+        chain = [hits[0]]
+        for p in hits[1:]:
+            if p - chain[-1] <= 2000:
+                chain.append(p)
+            else:
+                if len(chain) > len(best_chain):
+                    best_chain = chain
+                chain = [p]
+        if len(chain) > len(best_chain):
+            best_chain = chain
+    if len(best_chain) >= MIN_HITS:
+        s0, e0 = best_chain[0], best_chain[-1] + K
+        win = g[max(0, s0 - 100): e0 + 100]   # 小 pad: 保留 P1 本体, 侧翼保守序列会抬高跨簇 Jaccard 底噪
+        if 2500 <= len(win) <= 8000:
+            windows[acc] = (win, len(best_chain))
+        else:
+            fails.append((acc, f"window_len={len(win)}"))
+    else:
+        fails.append((acc, f"chain_hits={len(best_chain)}"))
+    if k % 50 == 0:
+        print(f"extracted {k}/{len(files)}", flush=True)
+print(f"extracted: {len(windows)}, fails: {len(fails)}", flush=True)
+
+# --- 聚类（含参考成员）---
+members = dict(windows)
+members["REF_M129_P1"] = (p1_m129, len(samps))
+members["REF_FH_P1"] = (p1_fh, sum(1 for s in samps if s in fh))
+for nm, s in panel.items():
+    members[f"REF_{nm}"] = (s, sum(1 for s in samps if s in s))
+keys = list(members)
+sk = {a: kmers(members[a][0]) for a in keys}
+print(f"clustering {len(keys)} members...", flush=True)
+
+# --- 两段式分类: 先最近参考（Jaccard + 边距）, 再对分歧株自聚类 ---
+j_m129 = {a: (len(sk[a] & sk["REF_M129_P1"]) / len(sk[a] | sk["REF_M129_P1"])) for a in keys}
+j_fh = {a: (len(sk[a] & sk["REF_FH_P1"]) / len(sk[a] | sk["REF_FH_P1"])) for a in keys}
+J_REF_MIN = 0.35   # 低于此 = 与两参考均不像（分歧谱系）
+MARGIN = 0.2       # 胜方需领先比例
+
+assign = {}
+div_pool = []
+for a in keys:
+    if a.startswith("REF_"):
+        continue
+    j1, j2 = j_m129[a], j_fh[a]
+    hi, lo = max(j1, j2), min(j1, j2)
+    if hi < J_REF_MIN:
+        div_pool.append(a)
+    elif (hi - lo) / hi >= MARGIN:
+        assign[a] = "type1(M129-like)" if j1 > j2 else "type2(FH-like)"
+    else:
+        assign[a] = "type-mixed(recombinant?)"
+
+# 分歧株自聚类（单连锁）
+parent = {a: a for a in div_pool}
+def find(x):
+    while parent[x] != x:
+        parent[x] = parent[parent[x]]
+        x = parent[x]
+    return x
+for a, b in itertools.combinations(div_pool, 2):
+    sa, sb = sk[a], sk[b]
+    inter = len(sa & sb)
+    if inter and inter / (len(sa) + len(sb) - inter) >= JAC_T:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+groups = collections.defaultdict(list)
+for a in div_pool:
+    groups[find(a)].append(a)
+
+# 簇级注释: 每簇对各参考成员的 mean Jaccard（亚型归属证据, 2j/2f/2g 等来自文献标签序列）
+ref_keys = [k for k in keys if k.startswith("REF_")]
+def mean_j(members, ref):
+    vals = []
+    for m in members:
+        sm, sr = sk[m], sk[ref]
+        u = len(sm | sr)
+        vals.append(len(sm & sr) / u if u else 0.0)
+    return sum(vals) / len(vals)
+
+n_div = 0
+cluster_notes = {}
+for root, mem in sorted(groups.items(), key=lambda kv: -len(kv[1])):
+    n_div += 1
+    lab = f"div-{chr(64 + n_div)}" if n_div <= 26 else f"div-{n_div}"
+    if len(mem) < 2:
+        lab = f"div-single({mem[0]})"
+    scores = sorted(((mean_j(mem, rf), rf) for rf in ref_keys), reverse=True)
+    if scores and scores[0][0] >= 0.15:
+        lab += f"≈{scores[0][1].replace('REF_', '')}(J={scores[0][0]:.2f})"
+    cluster_notes[lab] = scores[:3]
+    for m in mem:
+        assign[m] = lab
+# type1/type2 簇也注释
+for kk, lab in list(assign.items()):
+    pass  # type1/type2 标签保持不变（参考定义明确）
+
+cluster_of = assign
+print(f"assigned: type1/2={sum(1 for v in assign.values() if v.startswith('type1') or v.startswith('type2'))}, "
+      f"mixed={sum(1 for v in assign.values() if v.startswith('type-mixed'))}, "
+      f"divergent={len(div_pool)} ({len(groups)} clusters)", flush=True)
+
+# --- 输出 ---
+mat = {}
+with open(os.path.join(RESDIR, "MY9_分型矩阵.tsv"), encoding="utf-8-sig") as f:
+    for r in csv.DictReader(f, delimiter="\t"):
+        mat[r["ena_acc"]] = r
+
+out = os.path.join(RESDIR, "MY9_P1聚类.tsv")
+with open(out, "w", encoding="utf-8-sig", newline="") as f:
+    w = csv.writer(f, delimiter="\t")
+    w.writerow(["ena_acc", "P1_cluster", "P1_type", "anchor_hits", "window_len",
+                "country", "year", "ST", "resist_23S"])
+    for acc in sorted(windows):
+        m = mat.get(acc, {})
+        w.writerow([acc, cluster_of.get(acc, "?"), m.get("P1_type", ""), windows[acc][1],
+                    len(members[acc][0]), m.get("country", ""), m.get("year", ""),
+                    m.get("MLST_ST", ""), m.get("resist_23S", "")])
+print(f"written {out}")
+
+# --- 簇级摘要 ---
+cl = collections.defaultdict(lambda: {"n": 0, "ctry": collections.Counter(), "yr": [],
+                                      "st": collections.Counter(), "res": collections.Counter()})
+for acc, lab in cluster_of.items():
+    m = mat.get(acc, {})
+    d = cl[lab]
+    d["n"] += 1
+    d["ctry"][m.get("country", "").split(":")[0].strip() or "NA"] += 1
+    if m.get("year", "").isdigit():
+        d["yr"].append(int(m["year"]))
+    d["st"][m.get("MLST_ST", "?")] += 1
+    d["res"][m.get("resist_23S", "-")] += 1
+
+md = ["# MY9 P1 分歧谱系聚类摘要（W4）", "",
+      f"- 提取成功 {len(windows)}/{len(files)}（anchor 采样 {len(samps)} 个, ≥{MIN_HITS} 命中）",
+      f"- 单连锁聚类阈值 J≥{JAC_T}；簇数（不含参考）= {len(cl)}", "",
+      "| 簇 | n | 主要国家 | 年份范围 | 主 ST | 23S 耐药率 |", "|---|---|---|---|---|---|"]
+for lab, d in sorted(cl.items(), key=lambda kv: -kv[1]["n"]):
+    yrs = f"{min(d['yr'])}–{max(d['yr'])}" if d["yr"] else "-"
+    nres = d["res"].get("resistant", 0)
+    ncalled = d["res"].get("resistant", 0) + d["res"].get("WT", 0)
+    freq = f"{nres/ncalled:.0%}" if ncalled else "-"
+    md.append(f"| {lab} | {d['n']} | {', '.join(f'{k}({v})' for k, v in d['ctry'].most_common(3))} | {yrs} | "
+              f"{', '.join(f'{k}({v})' for k, v in d['st'].most_common(2))} | {freq} |")
+md += ["", "> 提取= M129 P1 采样 20-mer 定位（±500 nt 窗）；聚类= 窗口 20-mer Jaccard 单连锁；",
+       "> 参考成员: M129-P1（type1 锚）、FH-P1（type2 锚）、PHOL panel×5（reference/p1_panel_ncbi.fasta）。"]
+with open(os.path.join(RESDIR, "MY9_P1聚类摘要.md"), "w", encoding="utf-8") as f:
+    f.write("\n".join(md) + "\n")
+print("\n".join(md[7:]))

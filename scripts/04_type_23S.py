@@ -1,0 +1,165 @@
+# -*- coding: utf-8 -*-
+"""04_type_23S.py — 基于 ±2nt 间隙双锚点的 23S rRNA 耐药突变分型（v2）
+输入: ../data/fasta/*.fna(.gz) + ../reference/reference_anchors.json (v2, 03e 生成)
+      + ../MY9_入组池_基因组元数据.csv + ../MY9_下载清单.csv
+输出: ../results/MY9_23S分型.tsv + 控制台摘要（基因型×年份/国家）
+
+v2 相对 v1 的修正（均有实锚依据，详见 results/MY9_位点校准报告.md）:
+  1. 站点坐标: 切片位 = 文献位+64（2063→2127, 2064→2128, 2617→2681），WT=A/A/C 自检在 03e 已过
+  2. 锚点几何: 间隙 4 nt（up 端点 0-based iu+21, 站点 iu+24, down 起点 iu+26），
+     站点碱基不在任何锚内 → 相邻位点突变（2063/2064 相距 1 nt）不破坏锚
+  3. 反向链: raw genome 上顺序为 [rc(dn)][4nt][rc(up)]，站点碱基 = rc(genome[iu+23])
+     （v1 的 R 分支要求 rc(dn) 在 rc(up) 之后，逻辑颠倒，反向位点永远 call 不出）
+  4. 元数据 join: FASTA 文件名 = ena_acc（GCA_xxxx）,入组池主键 = assembly_accession（GCF/GCA_xxxx.1）,
+     经 MY9_下载清单.csv 映射（v1 直接用入组池键查 → RefSeq 记录全部查不到国家/年份）
+"""
+import csv, glob, gzip, json, os, sys, collections
+
+BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ANCH = json.load(open(os.path.join(BASE, "reference", "reference_anchors.json"), encoding="utf-8"))
+SITES = ANCH["sites"]  # lit(str) -> {label, mp_pos_slice, wt_base, anchor_up, anchor_down}
+ORDER = ("2063", "2064", "2617")
+
+def rc(s):
+    return s.translate(str.maketrans("ACGTNacgtn", "TGCANtgcan"))[::-1]
+
+# --- 元数据 join: ena_acc ↔ assembly_accession ---
+pool = {}
+with open(os.path.join(BASE, "MY9_入组池_基因组元数据.csv"), encoding="utf-8-sig") as f:
+    for r in csv.DictReader(f):
+        pool[r["assembly_accession"]] = r
+meta = {}
+dup = 0
+with open(os.path.join(BASE, "MY9_下载清单.csv"), encoding="utf-8-sig") as f:
+    for r in csv.DictReader(f):
+        rec = pool.get(r["assembly_accession"])
+        if rec is None:
+            continue
+        key = r["ena_acc"]
+        if key in meta and meta[key]["assembly_accession"] != rec["assembly_accession"]:
+            dup += 1
+            continue
+        meta[key] = rec
+        meta[rec["assembly_accession"]] = rec
+        meta[rec["assembly_accession"].split(".")[0]] = rec
+print(f"meta joined: {len(meta)} keys ({dup} ena_acc collisions skipped)", flush=True)
+
+def load(path):
+    op = gzip.open if path.endswith(".gz") else open
+    with op(path, "rt") as f:
+        return "".join(l.strip() for l in f if not l.startswith(">")).upper()
+
+def _occ(s, sub):
+    pos, start = [], 0
+    while True:
+        i = s.find(sub, start)
+        if i < 0:
+            return pos
+        pos.append(i)
+        start = i + 1
+
+def call_site(genome, up, dn, wt):
+    """双锚定位点碱基（支持多拷贝组装）。
+    F: [up][4nt][dn] 站点=iu+24; R: [rc(dn)][4nt][rc(up)] 站点=rc(iu+23)。
+    全部拷贝配对且碱基一致 → call（note 标注 dupNok）；不一致 → 拒绝。
+    返回 (allele, note)。"""
+    for orient in ("F", "R"):
+        if orient == "F":
+            u, d, boff, flip = up, dn, 24, False
+        else:
+            u, d, boff, flip = rc(dn), rc(up), 23, True
+        pu, pd = _occ(genome, u), _occ(genome, d)
+        if not pu or not pd:
+            continue
+        if len(pu) > 4 or len(pd) > 4:
+            return "-", f"multicopy{len(pu)}x"
+        bases = []
+        for iu in pu:
+            m = [idn for idn in pd if idn - (iu + 22) == 4]
+            if len(m) != 1:
+                continue
+            b = genome[iu + boff]
+            bases.append(rc(b) if flip else b)
+        if not bases:
+            continue
+        if len(set(bases)) > 1:
+            return "-", f"dup{len(bases)}_discordant"
+        b = bases[0]
+        note = "WT" if b == wt else f"{wt}>{b}"
+        if len(bases) > 1:
+            note += f"(dup{len(bases)}ok)"
+        return b, note
+    return "-", "anchor_not_found"
+
+files = sorted(glob.glob(os.path.join(BASE, "data", "fasta", "*.fna.gz"))) + \
+        sorted(glob.glob(os.path.join(BASE, "data", "fasta", "*.fna")))
+if not files:
+    sys.exit("no fasta under data/fasta — 先运行 MY9_02_download_fasta.py")
+
+os.makedirs(os.path.join(BASE, "results"), exist_ok=True)
+out = os.path.join(BASE, "results", "MY9_23S分型.tsv")
+rows = []
+with open(out, "w", encoding="utf-8", newline="") as f:
+    w = csv.writer(f, delimiter="\t")
+    w.writerow(["ena_acc", "assembly_accession", "country", "year", "host_or_source",
+                "site2063", "site2064", "site2617", "genotype", "note"])
+    for k, path in enumerate(files, 1):
+        acc = os.path.basename(path).replace(".fna.gz", "").replace(".fna", "")
+        m = meta.get(acc, {})
+        try:
+            g = load(path)
+        except Exception as e:
+            w.writerow([acc, m.get("assembly_accession", ""), m.get("country", ""), m.get("year", ""),
+                        "", "", "", "", "READ_FAIL", str(e)[:40]])
+            continue
+        calls = {}
+        for lit in ORDER:
+            s = SITES[lit]
+            b, al = call_site(g, s["anchor_up"], s["anchor_down"], s["wt_base"])
+            calls[lit] = (b, al)
+        geno = ";".join(calls[k][1] for k in ORDER)
+        geno = geno if geno.replace("WT", "").replace(";", "") else "WT"
+        note = "|".join(calls[k][1] for k in ORDER)
+        hs = (m.get("host", "") or m.get("isolation_source", ""))
+        w.writerow([acc, m.get("assembly_accession", ""), m.get("country", ""), m.get("year", ""), hs,
+                    calls["2063"][0], calls["2064"][0], calls["2617"][0],
+                    geno if geno != "WT" else "WT", note])
+        rows.append({"acc": acc, "country": m.get("country", ""), "year": m.get("year", ""), "calls": calls})
+        if k % 50 == 0:
+            print(f"typed {k}/{len(files)}", flush=True)
+
+# --- 摘要 ---
+def summarize(key_fn, title, topn=15):
+    c = collections.Counter()
+    for r in rows:
+        kk = key_fn(r["country"], r["year"], r["calls"])
+        if kk:
+            c[kk] += 1
+    print(f"--- {title} ---")
+    for kk, v in c.most_common(topn):
+        print(f"{kk}: {v}")
+    print()
+
+def mutant(calls):
+    """仅在三点位均成功 call 时判 mutant（allele='-' 的任何失败模式都不计入突变）"""
+    if any(calls[k][0] == "-" for k in ORDER):
+        return False
+    return any(calls[k][1] != "WT" for k in ORDER)
+
+summarize(lambda c, y, calls: ("not_called" if calls["2063"][0] == "-" else
+                               "mutant" if mutant(calls) else "WT"),
+          "genotype(total)")
+summarize(lambda c, y, calls: (y, "not_called" if calls["2063"][0] == "-" else
+                               "mutant" if mutant(calls) else "WT") if y else None,
+          "genotype by year (top 20)", 20)
+summarize(lambda c, y, calls: ((c.split(":")[0].strip() if c else "NA"),
+                               "not_called" if calls["2063"][0] == "-" else
+                               "mutant" if mutant(calls) else "WT")
+          if c and c != "not applicable" else None,
+          "genotype by country (top 15)", 15)
+summarize(lambda c, y, calls: ";".join(sorted(calls[k][1] for k in ORDER if calls[k][1] != "WT")) or "all-WT"
+          if calls["2063"][0] != "-" else None,
+          "mutation combinations (called only)", 12)
+
+nfail = sum(1 for r in rows if r["calls"]["2063"][0] == "-")
+print(f"typed {len(rows)}/{len(files)} (anchor_not_found: {nfail}) -> {out}")

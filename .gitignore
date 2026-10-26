@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Tool state (security hook)
+.mimosa/
+
+# Generated data and results (not redistributed)
+data/*
+!data/README.md
+downloads/
+reference/
+results/
+manuscript/tables/
+manuscript/figures/
+manuscript/render*/
+*.docx
+*.pdf
+*.zip
+*.tsv
+*.csv
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

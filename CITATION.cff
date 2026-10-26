@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use this code, please cite the accompanying manuscript."
+title: "Analysis code: genomic epidemiology of macrolide resistance in public Mycoplasma pneumoniae assemblies, 1944-2025"
+authors:
+  - family-names: Wu
+    given-names: Changxian
+    orcid: "https://orcid.org/0000-0003-2486-3380"
+  - family-names: Wang
+    given-names: Min
+  - family-names: Liu
+    given-names: Fan
+  - family-names: Zheng
+    given-names: Xiaoman
+  - family-names: Su
+    given-names: Hong
+type: software
+license: MIT

@@ -1,0 +1,9 @@
+# Versions used for the analyses reported in the manuscript.
+# Python 3.13.2 (the TreeTime step was also run under Python 3.12).
+numpy==2.4.6
+scipy==1.18.0
+matplotlib==3.11.1
+biopython==1.85
+python-docx==1.2.0
+treetime==0.11.4
+requests==2.34.2
