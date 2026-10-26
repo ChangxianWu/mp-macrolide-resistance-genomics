@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
-"""09_mlst.py — MLST 分型（pubMLST pubmlst_mpneumoniae_seqdef 方案 1，8 位点）
-输入: ../data/fasta/*.fna + pubMLST API（等位基因 FASTA + profiles_csv，缓存至 reference/）
-输出: ../results/MY9_MLST.tsv + 控制台摘要
+"""09_mlst.py — MLST typing (pubMLST pubmlst_mpneumoniae_seqdef scheme 1, 8 loci)
+Input: ../data/fasta/*.fna + pubMLST API (allele FASTA + profiles_csv, cached under reference/)
+Output: ../results/MY9_MLST.tsv + console summary
 
-方法:
-  1) 每位点拉取全部等位基因序列（7± 条/位点，~470-680 nt）+ profiles_csv（ST ← 8 位点等位组合）
-  2) 基因组内定位: 等位基因全长精确匹配（正/反链）; 未命中 → 20-mer 共享最高者记 nearest（标注 mismatch）
-  3) ST: 8 位点组合精确查表; 组合未收录 → novel_ST(near_ST_x)
-局限: pubMLST 未鉴权时仅含 ≤2024-12-31 提交的 profile（对定义无影响）; 新等位基因需 W4+ 更新。
+Method:
+  1) Fetch all allele sequences per locus (7± per locus, ~470-680 nt) + profiles_csv (ST ← allele combination over the 8 loci)
+  2) In-genome mapping: exact full-length allele match (forward/reverse strand); no hit → record the allele with the highest 20-mer sharing as nearest (marked as mismatch)
+  3) ST: exact lookup of the 8-locus combination; combination not in the table → novel_ST(near_ST_x)
+Limitations: without pubMLST authentication only profiles submitted by 2024-12-31 are included (does not affect the definitions); new alleles require a W4+ update.
 """
 import csv, glob, json, os, sys, urllib.request, collections
 
@@ -29,7 +29,7 @@ def get(u, binary=False, tries=5):
             import time; time.sleep(5 * i)
     raise RuntimeError(f"FAILED {u}")
 
-# --- 1) 等位基因 + profiles（缓存）---
+# --- 1) alleles + profiles (cached) ---
 if os.path.exists(CACHE):
     cache = json.load(open(CACHE))
     print("[cache] mlst_cache.json", flush=True)
@@ -58,7 +58,7 @@ prof_rows = cache["profiles"]
 header = prof_rows[0]
 st_map = {}
 for r in prof_rows[1:]:
-    r = (r + [""] * len(header))[:len(header)]   # 尾列缺失补空
+    r = (r + [""] * len(header))[:len(header)]   # pad missing trailing columns with empty strings
     combo = tuple(r[header.index(loc)] for loc in LOCI)
     st_map[combo] = (r[0], r[header.index("clonal_complex")])
 print(f"profiles: {len(st_map)} STs", flush=True)
@@ -71,7 +71,7 @@ def kmers(seq, k=20):
     return {seq[i:i+k] for i in range(len(seq) - k + 1) if "N" not in seq[i:i+k]}
 
 def call_locus(genome, kg, allele_seqs):
-    """返回 (allele, note)。精确匹配优先，否则最近邻(20-mer)。"""
+    """Return (allele, note). Exact match takes priority; otherwise the nearest neighbour (20-mer)."""
     best_exact, best_near, best_j = None, None, -1
     for num, seq in allele_seqs.items():
         if seq in genome or rc(seq) in genome:
@@ -85,7 +85,7 @@ def call_locus(genome, kg, allele_seqs):
         return best_exact, "exact"
     return f"near_{best_near}", f"nearest_j={best_j:.2f}"
 
-# --- 2) 逐株分型 ---
+# --- 2) per-strain typing ---
 def fseq(path):
     return "".join(l.strip() for l in open(path) if not l.startswith(">")).upper()
 
@@ -132,7 +132,7 @@ with open(out, "w", encoding="utf-8", newline="") as f:
         if k % 50 == 0:
             print(f"typed {k}/{len(files)}", flush=True)
 
-# --- 3) 摘要 ---
+# --- 3) summary ---
 rows = list(csv.DictReader(open(out), delimiter="\t"))
 c = collections.Counter(r["ST"] for r in rows)
 print("--- ST distribution ---")

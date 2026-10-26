@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-"""24_manuscript_tables.py — 稿件表格 CSV（表格直读 CSV, 数字不落正文）
-输入: results/MY9_分型矩阵.tsv、results/MY9_耐药频率_按年份.tsv、results/MY9_流行克隆定义.md、
-      results/coresnp/MY9_SNP距离.phylip
-输出: manuscript/tables/table1_panel.csv ... table5_temporal.csv
+"""24_manuscript_tables.py — Manuscript table CSVs (tables are read directly from CSV; no numbers hard-coded in prose)
+Input: the integrated per-genome typing matrix, the resistance-frequency-by-year table and the
+      epidemic tight-clone definition report under results/, plus the core-SNP pairwise distance
+      matrix under results/coresnp/
+Output: manuscript/tables/table1_panel.csv ... table5_temporal.csv
 """
 import csv, os, re
 import numpy as np
@@ -30,7 +31,7 @@ def w(name, header, data):
 
 # ---- Table 1: panel by country/region (n>=5) ----
 def disp_st(k):
-    """ST 展示命名规范化（评审 P2）: uncertain(near X)->X-related, novel(near X)->X-novel。"""
+    """Normalize ST display names (review P2): uncertain(near X) -> X-related, novel(near X) -> X-novel."""
     if k.startswith("uncertain(near "):
         return k.replace("uncertain(near ", "").rstrip(")") + "-related"
     if k.startswith("novel(near "):
@@ -97,14 +98,14 @@ w("table2_by_year.csv", ["Year", "N_genomes", "N_resistant", "N_wildtype", "Pct_
 
 # ---- Table 3: by MLST ST / P1 type (n>=10) ----
 def disp_st(k):
-    """ST 展示命名规范化（评审 P2）: uncertain(near X)->X-related, novel(near X)->X-novel。"""
+    """Normalize ST display names (review P2): uncertain(near X) -> X-related, novel(near X) -> X-novel."""
     if k.startswith("uncertain(near "):
         return k.replace("uncertain(near ", "").rstrip(")") + "-related"
     if k.startswith("novel(near "):
         return k.replace("novel(near ", "").rstrip(")") + "-novel"
     return k
 
-# 国家/地区展示名规范化（与 MY9_28 同口径; NCBI 原文只在 S1 保留）
+# Country/region display-name normalization (same convention as MY9_28; raw NCBI text is retained only in S1)
 NORM = {"Taiwan": "Taiwan, China", "China": "Mainland China", "USA": "United States",
         "not applicable": "Not specified"}
 def norm_regions(s):
@@ -136,7 +137,7 @@ for label, keyfn in [("MLST ST", lambda r: ("ST" + disp_st(r["MLST_ST"])) if r["
 w("table3_by_type.csv", ["Stratifier", "Group", "N_genomes", "N_resistant", "N_wildtype",
                          "Pct_resistant"], t3)
 
-# ---- Table 4: epidemic clone thresholds（复用 MY9_23 结果, 直接解析其 md 表） ----
+# ---- Table 4: epidemic clone thresholds (reuses MY9_23 output; parses its markdown table directly) ----
 t4 = []
 md = open(os.path.join(RES, "MY9_流行克隆定义.md"), encoding="utf-8").read()
 for m in re.finditer(r"最大簇 n=(\d+)（占 (\d+)%）, 内部成对中位 (\d+) SNP", md):
@@ -151,7 +152,7 @@ for m in re.finditer(r"## 阈值 t = (\d+) SNP\n- 最大簇 n=(\d+)（占 (\d+)%
 w("table4_clone.csv", ["SNP_threshold", "N_cluster", "Pct_of_panel", "Median_within_SNP",
                        "Resistant_called", "Pct_resistant", "Median_year", "Top_regions"], t4)
 
-# ---- Table 5: temporal signal（成对回归口径 + TreeTime 网格跨度） ----
+# ---- Table 5: temporal signal (pairwise regression + TreeTime grid range) ----
 L = open(os.path.join(CS, "MY9_SNP距离.phylip"), encoding="utf-8").read().strip().splitlines()
 accs = [ln.split("\t")[0] for ln in L[1:]]
 D = np.array([[float(x) for x in ln.split("\t")[1].split()] for ln in L[1:]])
@@ -175,7 +176,7 @@ t5 = []
 for lab, mask in [("All ST3 genomes", st == "3"),
                   ("Epidemic clone (<=25 SNP single-linkage)", None)]:
     if mask is None:
-        # 复用 MY9_23 的簇定义
+        # Reuse the cluster definition from MY9_23
         p = list(range(len(accs)))
         def find(x):
             while p[x] != x:
@@ -192,7 +193,7 @@ for lab, mask in [("All ST3 genomes", st == "3"),
         mask = m
     s, b, r, n = pairfit(mask)
     t5.append([lab, f"{s:.2f}", f"{s/2:.2f}", f"{r:.3f}", f"{b:.1f}", n])
-# TreeTime 网格跨度
+# TreeTime grid range
 tt = os.path.join(CS, "treetime", "tt_summary.tsv")
 if os.path.exists(tt):
     vals = [float(r["rate_snp_genome_yr"]) for r in csv.DictReader(open(tt, encoding="utf-8-sig"), delimiter="\t")
@@ -204,7 +205,7 @@ if os.path.exists(tt):
 w("table5_temporal.csv", ["Dataset", "Pairwise_rate_SNP_per_yr_both_lineages",
                           "Per_lineage_rate", "r", "Intercept_SNP", "N_pairs"], t5)
 
-# ---- Table 6 (统计量单源): 正文引用的非表内数值（规则 11/33） ----
+# ---- Table 6 (single source of statistics): non-table values cited in the main text (rules 11/33) ----
 import re as _re
 summ = open(os.path.join(CS, "MY9_coreSNP_摘要.md"), encoding="utf-8").read()
 rho = (_re.search(r"Spearman ρ = ([\d.]+)", summ) or [])[1]
@@ -245,7 +246,7 @@ t6 = [
     ["taxid", "2104", "NCBI taxonomy identifier (Mycoplasmoides pneumoniae)"],
     ["ec_equivalents", "2058/2059/2611", "E. coli numbering equivalents"],
 ]
-# ST3 内部离散度与 ST3<->ST17 距离（直接由距离矩阵计算, 不解析中文散文）
+# Within-ST3 dispersion and ST3<->ST17 distance (computed directly from the distance matrix, not parsed from Chinese prose)
 _i3 = np.nonzero(st == "3")[0]
 _sub3 = D[np.ix_(_i3, _i3)]
 _iu3 = np.triu_indices(len(_i3), 1)
@@ -261,13 +262,13 @@ t6 += [
     ["other_regions", str(N - sum(int(r[1]) for r in t1[:-1])), "genomes from regions with fewer than five genomes, including unspecified"],
     ["python_versions", "3.13/3.12", "analysis runtimes (main environment and TreeTime virtual environment)"],
 ]
-# 全树 Fitch 结果（MY9_26 产物）并入 table6, 保持单源链路（规则 142）
+# Whole-tree Fitch results (MY9_26 output) merged into table6, preserving the single-source chain (rule 142)
 _ft = open(os.path.join(BASE, "results", "coresnp", "MY9_全树祖先重建.md"), encoding="utf-8").read()
 _mch = _re.search(r"fitch_full_changes,(\d+)", _ft)
 _mga = _re.search(r"fitch_full_gains,(\d+)", _ft)
-# 四类会计分解（评审 P0-1）: 变化边方向计数, 直接解析权威 md 的边清单
+# Four-class accounting breakdown (review P0-1): counts of change-edge directions, parsed directly from the authoritative md edge list
 _cls = Counter(_re.findall(r"- 变化边 (A→G|G→A|A→T|A→C):", _ft))
-# 克隆单次获得检验点估计（评审 P0-2）: MY9_32 扰动检验 md 的真实树行
+# Clone single-gain test point estimates (review P0-2): the true-tree row of the MY9_32 perturbation-test md
 _rb = open(os.path.join(CS, "MY9_树稳健性_扰动.md"), encoding="utf-8").read()
 _mcg = _re.search(r"克隆成员置 G/其余未知时所需变为 G 的边数 (\d+)", _rb)
 _mpt = _re.search(r"全树变更 (\d+)–(\d+)（中位 \d+）", _rb)
@@ -285,7 +286,7 @@ t6 += [
     ["perturb_st3_within", (_mps.group(1) + "-" + _mps.group(2)) if _mps else "NA",
      "range of within-ST3 changes over 15 NNI-perturbed trees (MY9_32)"],
 ]
-# 簇亚结构与采样敏感性（MY9_33 产物并入 table6, 保持单源链路; 与全树重建 md/ST3 权威值对账）
+# Cluster substructure and sampling sensitivity (MY9_33 output merged into table6, preserving the single-source chain; reconciled with the whole-tree reconstruction md and the authoritative ST3 values)
 _ss_rows = list(csv.reader(open(os.path.join(CS, "MY9_簇亚结构与采样敏感性.tsv"), encoding="utf-8-sig"), delimiter="\t"))
 _ss_m, _ss_thr, _mode = {}, {}, None
 for _r in _ss_rows:
@@ -311,7 +312,7 @@ t6 += [
     ["prerecovery_tree_tips", _ss_m["prerecovery_tree_tips"], "tips retained after pruning the expansion batch (same topology)"],
     ["subthr_max_component", "/".join(str(_ss_thr[t]) for t in ("10", "15", "20")), "largest within-group component when single-linkage is repeated at 10/15/20 SNPs (352 = group not split)"],
 ]
-# ST7 唯一耐药株与 2000 年前面板核查（第七轮评审 P1-2/P1-3; 由分型矩阵直接计算）
+# Single ST7 resistance-associated strain and pre-2000 panel check (review round 7, P1-2/P1-3; computed directly from the typing matrix)
 def _cc2(c): return c.split(":")[0].strip()
 def _mut(r):
     if r["site2063"] != "A": return "A2063" + r["site2063"]
@@ -327,7 +328,7 @@ _pre = [r for r in rows if r["year"].isdigit() and int(r["year"]) < 2000]
 _prer = sorted([r for r in _pre if r["resist_23S"] == "resistant"], key=lambda r: r["year"])
 _parts = [f"{_disp_c(r['country'])} in {r['year']} (ST{disp_st(r['MLST_ST'])})" for r in _prer]
 _pre_detail = (" and ".join(_parts) if len(_parts) == 2 else "; ".join(_parts)) or "none"
-# pre-2000 耐药株邻接关系（评审 P1-1; 克隆阈值口径, D 为 SNP 单位）
+# Neighbourhood of the pre-2000 resistance-associated strains (review P1-1; clone-threshold definition, D in SNP units)
 _pre_t = [r["ena_acc"] for r in _prer]
 _n25 = {}
 _near = {}
@@ -342,13 +343,13 @@ _row99 = D[accs.index(_pre_t[1])].copy()
 _row99[accs.index(_pre_t[1])] = np.inf
 _jacc = accs[int(np.argmin(_row99))]
 _jr = mat[_jacc]
-# 评审第十一轮: 两株纽约 1999 的独立性——入组池元数据核验 BioSample 登记号
-# 池 CSV 键带前缀与版本(GCF_002128205.1), 矩阵键为 GCA_002128205, 统一取数字段对齐
+# Review round 11: independence of the two 1999 New York strains — verify BioSample accessions against the inclusion-pool metadata
+# Pool CSV keys carry a prefix and version (GCF_002128205.1); matrix keys are GCA_002128205, so align on the numeric field
 _pool = {r["assembly_accession"].split("_")[1].split(".")[0]: r for r in csv.DictReader(
     open(os.path.join(BASE, "MY9_入组池_基因组元数据.csv"), encoding="utf-8-sig"))}
 _bs99 = [_pool[a.split("_")[1]]["biosample"] for a in (mat[_pre_t[1]]["ena_acc"], _jacc)]
 assert _bs99[0] and _bs99[1] and _bs99[0] != _bs99[1], f"NY1999 BioSample check failed: {_bs99}"
-# same-city 升级: 完整 country 字符串逐字比对(USA: New York), 不再只比国家字段
+# same-city escalation: exact string comparison of the full country value (USA: New York), no longer only the country field
 _wt_same_city_year = int(
     _jr["resist_23S"] == "WT"
     and _jr["year"] == mat[_pre_t[1]]["year"]

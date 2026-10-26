@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
-"""01b_ena_manifest.py — 用 ENA Portal 的 assembly_name 构建下载清单
-输入: ../ena_assembly_meta.tsv (accession,assembly_name,assembly_level)
-      ../MY9_入组池_基因组元数据.csv
-输出: ../MY9_下载清单.csv  (assembly_accession(带版本), ena_acc(无版本), trio_ok, included,
-                            ena_fasta_url, ncbi_fna_gz_url, filename)
-无需 NCBI 在线（NCBI URL 备用列，待其解除限流后可用）。
+"""01b_ena_manifest.py — Build the download manifest using assembly_name from the ENA Portal
+Input:  ../ena_assembly_meta.tsv (accession,assembly_name,assembly_level)
+        the genome metadata CSV for the inclusion pool
+Output: the download manifest CSV under the repository root
+        (assembly_accession (with version), ena_acc (without version), trio_ok, included,
+        ena_fasta_url, ncbi_fna_gz_url, filename)
+No NCBI connectivity required (the NCBI URL is a fallback column, usable once rate limiting is lifted).
 """
 import csv, os
 
@@ -35,7 +36,7 @@ with open(out, "w", newline="", encoding="utf-8-sig") as f:
         ver = r["assembly_accession"]
         name = names.get(key)
         if not name:
-            # GCF(GenBank GCA 配对): RefSeq 与 GenBank 共享数字段
+            # GCF (RefSeq) / GCA (GenBank) pairing: RefSeq and GenBank share the numeric part
             if key.startswith("GCF"):
                 gca_key = "GCA" + key[3:]
                 name = names.get(gca_key)

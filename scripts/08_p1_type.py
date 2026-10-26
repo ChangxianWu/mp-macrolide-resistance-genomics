@@ -1,20 +1,20 @@
 # -*- coding: utf-8 -*-
-"""08_p1_type.py — P1 黏附素基因分型（type 1 / type 2 + 特异 20-mer 分类器，v2）
-输入: ../data/fasta/*.fna + reference/U00089.2.embl.cache.txt + reference/CP010546.embl.cache.txt
-输出: ../results/MY9_P1分型.tsv + 控制台摘要
+"""08_p1_type.py — P1 adhesin genotyping (type 1 / type 2 + specific 20-mer classifier, v2)
+Input: ../data/fasta/*.fna + reference/U00089.2.embl.cache.txt + reference/CP010546.embl.cache.txt
+Output: the per-genome P1 typing table under ../results/ + console summary
 
-v2 关键变更（相对 v1 probe panel）:
-  1. 参考基因组一律从 **EMBL SQ 块解析**（注释+序列单一来源）。原因: 本环境中 ENA FASTA 端点对
-     U00089.2 曾返回与注释坐标系不一致的内容（816,466 nt vs 官方 816,394 bp，P1 起点非 ATG），
-     曾导致分类器输入错位; 当前 FASTA 集已抽样核验，稳定无此问题。
-  2. 分类器改为全 P1 特异 20-mer 集计数（v1 分歧窗 30-mer probe 对 field 株太严格: P1 进化快,
-     最分歧区与双参考精确匹配过少 → 380 ambiguous/145 not_called）。
-     特异集 = kmer(P1_ref) - kmer(对方P1) - kmer(参考基因组其余部分)（排除 RepMP 拷贝交叉）。
-  3. 校验: M129 基因组 = 816,394 bp; P1 切片以 ATG 开头且长度 4884/4905。
-方法（文献依据）:
-  M129 (ATCC 29342) = P1 type 1 参考; FH (ATCC 15531, CP010546) = type 2 参考（Schwartz 2009 JCM）。
-  M129 MPN141 = 180858..185741 (/gene="P1"); FH P1 = F539_00815 = 179324..184228（注释 product="adhesin",
-  唯一 4.5–5.3 kb 者）。亚型 1a/1b/2a/2b/2c(+2d) 需追加参考，后续细化; 主型 1/2 为 W3 交付。
+Key v2 changes (relative to the v1 probe panel):
+  1. Reference genomes are always parsed from the **EMBL SQ block** (single source for annotation + sequence). Reason: in this environment the ENA FASTA endpoint
+     once returned content inconsistent with the annotation coordinate system for U00089.2 (816,466 nt vs the official 816,394 bp, P1 start not ATG),
+     which had misaligned the classifier input; the current FASTA set has been spot-checked and is stable with no such issue.
+  2. The classifier now counts over the full set of P1-specific 20-mers (the v1 divergent-window 30-mer probe was too strict for field strains: P1 evolves fast,
+     and the most divergent region matched the two references too rarely → 380 ambiguous/145 not_called).
+     Specific set = kmer(P1_ref) - kmer(other P1) - kmer(rest of the reference genome) (to exclude RepMP copy cross-matches).
+  3. Validation: M129 genome = 816,394 bp; P1 slice starts with ATG and has length 4884/4905.
+Method (literature basis):
+  M129 (ATCC 29342) = P1 type 1 reference; FH (ATCC 15531, CP010546) = type 2 reference (Schwartz 2009 JCM).
+  M129 MPN141 = 180858..185741 (/gene="P1"); FH P1 = F539_00815 = 179324..184228 (annotation product="adhesin",
+  the only one of 4.5–5.3 kb). Subtypes 1a/1b/2a/2b/2c(+2d) require additional references and will be refined later; major types 1/2 are the W3 deliverable.
 """
 import csv, glob, os, re, sys, collections
 
@@ -26,12 +26,12 @@ RATIO = 0.8
 MIN_HITS = 30
 
 def fseq_text(t):
-    """拼接 FASTA 全部 record（多 contig 组装的 P1 可能不在第一条上——v2 初版只取首条曾致
-    153 株 not_called 假象; k-mer 分类器对拼接顺序不敏感，拼接安全）"""
+    """Concatenate all FASTA records (the P1 of a multi-contig assembly may not be on the first contig — the initial v2 version took only the first,
+    which produced a spurious 153 not_called; the k-mer classifier is insensitive to concatenation order, so concatenation is safe)"""
     return "".join(l.strip() for l in t.splitlines() if not l.startswith(">")).upper()
 
 def embl_sq_seq(embl):
-    """解析 EMBL SQ 块为基因组序列（兼容 IUPAC 模糊码 m/r/s 等）"""
+    """Parse the EMBL SQ block into a genome sequence (supports IUPAC ambiguity codes such as m/r/s)"""
     body = embl.split("SQ   ", 1)[1].split("//", 1)[0]
     lines = body.splitlines()
     seq = "".join(re.findall(r"[A-Za-z]+", " ".join(lines[1:])))
@@ -50,7 +50,7 @@ RC = str.maketrans("ACGTNacgtn", "TGCANtgcan")
 def rc(s):
     return s.translate(RC)[::-1]
 
-# --- 1) M129（type 1 参考）: EMBL SQ ---
+# --- 1) M129 (type 1 reference): EMBL SQ ---
 embl129 = open(os.path.join(REFDIR, "U00089.2.embl.cache.txt"), encoding="utf-8").read()
 g129 = embl_sq_seq(embl129)
 assert len(g129) == 816394, f"M129 EMBL genome len {len(g129)} != 816394"
@@ -64,7 +64,7 @@ assert p1_type1.startswith("ATG") and len(p1_type1) == 4884, \
     f"M129 P1 切片异常: start={p1_type1[:3]} len={len(p1_type1)}"
 print(f"M129 genome={len(g129)}  P1(type1 ref) {s0_m129}..{e_m129} len={len(p1_type1)} start=ATG ✓", flush=True)
 
-# --- 2) FH（type 2 参考）: EMBL SQ ---
+# --- 2) FH (type 2 reference): EMBL SQ ---
 FA_FH_EMBL = os.path.join(REFDIR, "CP010546.embl.cache.txt")
 assert os.path.exists(FA_FH_EMBL), "CP010546 EMBL 缓存缺失（先运行 08 v1 或手动抓取）"
 embl_fh = open(FA_FH_EMBL, encoding="utf-8").read()
@@ -90,10 +90,10 @@ assert p1_type2.startswith("ATG") and len(p1_type2) == 4905, \
     f"FH P1 切片异常: start={p1_type2[:3]} len={len(p1_type2)}"
 print(f"FH genome={len(fh_g)}  P1(type2 ref) {s0_fh}..{e_fh} len={len(p1_type2)} start=ATG ✓", flush=True)
 
-# --- 3) 特异 20-mer 集 ---
+# --- 3) specific 20-mer sets ---
 _RC = str.maketrans("ACGTNacgtn", "TGCANtgcan")
 def kmers(seq, k=K):
-    """canonical k-mer 集（min(fwd, rc)）——反向 contig 的 P1 区同样有效"""
+    """canonical k-mer set (min(fwd, rc)) — also valid for the P1 region of reverse-strand contigs"""
     out = set()
     for i in range(len(seq) - k + 1):
         x = seq[i:i+k]
@@ -108,7 +108,7 @@ spec1 = k11 - k12 - rest129 - restfh
 spec2 = k12 - k11 - rest129 - restfh
 print(f"specific {K}-mers: type1={len(spec1)} type2={len(spec2)}", flush=True)
 
-# --- 4) 分类 ---
+# --- 4) classification ---
 def classify(genome):
     kg = kmers(genome)
     h1, h2 = len(kg & spec1), len(kg & spec2)
@@ -124,7 +124,7 @@ def classify(genome):
         return "type2", h1, h2
     return "ambiguous", h1, h2
 
-# --- 元数据 join（同 04）---
+# --- metadata join (same as 04) ---
 pool = {}
 with open(os.path.join(BASE, "MY9_入组池_基因组元数据.csv"), encoding="utf-8-sig") as f:
     for r in csv.DictReader(f):
@@ -154,7 +154,7 @@ with open(out, "w", encoding="utf-8", newline="") as f:
         if k % 50 == 0:
             print(f"typed {k}/{len(files)}", flush=True)
 
-# --- 摘要 ---
+# --- summary ---
 rows = list(csv.DictReader(open(out), delimiter="\t"))
 c = collections.Counter(r["P1_type"] for r in rows)
 print("--- P1 type(total) ---")

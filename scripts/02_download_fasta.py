@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-"""02_download_fasta.py — 批量下载 FASTA（幂等可续传，多线程，指数退避）
-用法: python MY9_02_download_fasta.py [--included-only] [--workers 6]
-输出: ../data/fasta/<acc>.fna.gz + ../download_log.tsv
+"""02_download_fasta.py — Batch download of FASTA files (idempotent and resumable, multithreaded,
+exponential backoff)
+Usage: python MY9_02_download_fasta.py [--included-only] [--workers 6]
+Output: ../data/fasta/<acc>.fna.gz + ../download_log.tsv
 """
 import argparse, concurrent.futures as cf, csv, gzip, os, sys, time, urllib.request, urllib.error
 

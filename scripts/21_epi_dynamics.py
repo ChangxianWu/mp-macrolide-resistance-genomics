@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
-"""21_epi_dynamics.py — 耐药流行时间动态: 逻辑增长拟合 + 免根成对分子钟 + Fig4
-输入: results/MY9_耐药频率_按年份.tsv（耐药率×年）
-      results/MY9_分型矩阵.tsv（分组/国家/年份）
-      results/coresnp/MY9_SNP距离.phylip（替换/位点, 528 株）
-输出: results/MY9_流行病学动态.md
-      results/figures/MY9_Fig4_时间动态.png/.pdf（A 耐药率+逻辑拟合; B 成对 SNP vs Δyear）
+"""21_epi_dynamics.py — temporal dynamics of resistance: logistic growth fit + root-free pairwise molecular clock + Fig4
+Inputs: the per-year resistance frequency table under results/
+        the integrated per-genome typing matrix under results/ (group/country/year)
+        the core-SNP distance matrix (PHYLIP, substitutions/site, 528 strains) under results/coresnp/
+Outputs: the epidemiological dynamics report (Markdown) under results/
+         the Figure 4 panel (resistance rate + logistic fit; pairwise SNP vs Δyear) under results/figures/
 
-口径:
-- 逻辑增长: freq(t) = K / (1 + exp(-r (t - t50))), 加权最小二乘（权重=该年 call 出株数）;
-  仅用 n_called>=5 的年份; 另报剔除 China/Taiwan 的敏感性
-- 免根成对分子钟: 同克隆（ST3）内 Δyear>0 的成对比较, SNP 数 = 距离 × 748,341;
-  斜率 = 两谱系合计速率 → 每谱系减半; 该估计不依赖定根
+Conventions:
+- Logistic growth: freq(t) = K / (1 + exp(-r (t - t50))), weighted least squares (weights = number of strains called that year);
+  only years with n_called>=5 are used; a sensitivity analysis excluding China/Taiwan is also reported
+- Root-free pairwise molecular clock: pairwise comparisons within the same clone (ST3) with Δyear>0, SNP count = distance × 748,341;
+  the slope is the combined rate of both lineages -> halved per lineage; this estimate does not depend on rooting
 """
 import csv, os
 import numpy as np
@@ -28,7 +28,7 @@ CORE_SITES = 742308
 plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
 
-# ---------- 输入 ----------
+# ---------- Inputs ----------
 year_rows = []
 with open(os.path.join(RES, "MY9_耐药频率_按年份.tsv"), encoding="utf-8-sig") as f:
     for r in csv.DictReader(f, delimiter="\t"):
@@ -42,7 +42,7 @@ with open(os.path.join(RES, "MY9_分型矩阵.tsv"), encoding="utf-8-sig") as f:
     for r in csv.DictReader(f, delimiter="\t"):
         mat[r["ena_acc"]] = r
 
-# ---------- A. 逻辑增长 ----------
+# ---------- A. Logistic growth ----------
 def logistic(t, K, r, t50):
     return K / (1.0 + np.exp(-r * (t - t50)))
 
@@ -67,7 +67,7 @@ r2 = 1 - (resid ** 2).sum() / ((fr - np.average(fr, weights=wts)) ** 2).sum()
 print(f"logistic K={popt[0]:.3f}±{perr[0]:.3f} r={popt[1]:.3f}±{perr[1]:.3f} "
       f"t50={popt[2]:.1f}±{perr[2]:.1f} R2={r2:.3f}")
 
-# 敏感性: 剔除 China/Taiwan
+# Sensitivity: exclude China/Taiwan
 sub = {a: r for a, r in mat.items() if r["country"].split(":")[0].strip() not in ("China", "Taiwan")}
 from collections import defaultdict
 by_year = defaultdict(lambda: [0, 0])
@@ -94,7 +94,7 @@ except Exception as e:
     popt2 = perr2 = None
     print("东亚剔除拟合失败:", e)
 
-# ---------- B. 免根成对分子钟 ----------
+# ---------- B. Root-free pairwise molecular clock ----------
 lines = open(os.path.join(CS, "MY9_SNP距离.phylip"), encoding="utf-8").read().strip().splitlines()
 accs = [ln.split("\t")[0] for ln in lines[1:]]
 Dm = np.array([[float(x) for x in ln.split("\t")[1].split()] for ln in lines[1:]])
@@ -115,7 +115,7 @@ dy = np.array(dy); dd = np.array(dd)
 slope, intercept = np.polyfit(dy, dd, 1)
 r_pear = np.corrcoef(dy, dd)[0, 1]
 print(f"成对回归: n={len(dy)} 斜率={slope:.3f} SNP/年 r={r_pear:.3f} 截距={intercept:.1f}")
-# 0 SNP 对的占比（同一波的近缘株）
+# Fraction of pairs with 0 SNP (close relatives from the same wave)
 print("成对距离=0 比例: %.3f" % ((dd == 0).mean()))
 
 bins = [0, 1, 2, 3, 4, 5, 6, 8, 10, 15, 20, 30]
@@ -125,7 +125,7 @@ for k in range(len(bins) - 1):
     if m.sum() >= 20:
         bx.append((bins[k] + bins[k + 1]) / 2); by_.append(np.median(dd[m])); bn.append(int(m.sum()))
 
-# ---------- 报告 ----------
+# ---------- Report ----------
 rep = ["# MY9 流行病学时间动态（逻辑增长 + 免根分子钟）\n",
        f"- 逻辑增长拟合（年份点 n≥5, 加权）: **K={popt[0]:.3f}±{perr[0]:.3f}**, "
        f"r={popt[1]:.3f}±{perr[1]:.3f}/年, **t50={popt[2]:.1f}±{perr[2]:.1f}**, R²={r2:.3f}\n"]

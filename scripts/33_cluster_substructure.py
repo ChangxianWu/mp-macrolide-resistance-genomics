@@ -1,20 +1,21 @@
 # -*- coding: utf-8 -*-
-"""33_cluster_substructure.py — 352 簇亚结构 + 祖先态重建采样敏感性
+"""33_cluster_substructure.py — Sub-structure of the 352-member cluster + sampling sensitivity of ancestral-state reconstruction
 
-两个分析, 全部由既有单源数据推导, 不改任何上游结果:
-  A. 簇亚结构: 352 株 25-SNP single-linkage 组内, 在 10/15/20 SNP 阈值下再做 single-linkage,
-     回答"2019 波与 2023 波是同一亚系复燃还是不同亚系接棒"（评审第六部分路径 2）。
-     波次口径: ≤2018 / 2019-2020 / 2023-2025（与 FigS2 年份直方一致）。
-  B. 采样敏感性: 按 v1_backup 下载清单（included=1, 共 532 株预回填面板）与当前面板的集合差
-     识别 ENA 回填批, 从当前 642-tip NJ 树剪去回填株, 在同一拓扑上重算 2063 位点 Fitch 最小变化数
-     （全树 + ST3 子树）——把"加入日本时间序列（2000 年前全野生型, 2000 年后含三个耐药波次）
-     如何影响祖先态重建"量化为可复现数字（评审第六部分路径 1 的可执行替代: 同拓扑控制, 只改叶集）。
-     自检: 不剪枝时必须复现 table6 权威值（全树 34 / ST3 子树 6）, 否则报错。
+Two analyses, both derived entirely from existing single-source data, without altering any upstream result:
+  A. Cluster sub-structure: within the 352-genome 25-SNP single-linkage group, apply single-linkage again at 10/15/20 SNP thresholds,
+     to answer "is the 2019 wave a resurgence of the same sub-lineage, or a different sub-lineage taking over?" (review part 6, path 2).
+     Wave definition: <=2018 / 2019-2020 / 2023-2025 (consistent with the year histogram in FigS2).
+  B. Sampling sensitivity: take the set difference between the v1_backup download manifest (included=1, 532 genomes in the pre-backfill panel) and the current panel
+     to identify the ENA backfill batch, prune the backfilled genomes from the current 642-tip NJ tree, and recompute the minimum number of Fitch changes at site 2063 on the same topology
+     (whole tree + ST3 subtree) — this turns "how adding the Japanese time series (all wild type before 2000, three resistance-associated waves after 2000)
+     affects ancestral-state reconstruction" into reproducible numbers (an executable substitute for review part 6, path 1: same topology controlled, only the leaf set changes).
+     Self-check: without pruning, the authoritative values from table6 must be reproduced (whole tree 34 / ST3 subtree 6); otherwise an error is raised.
 
-输入: results/coresnp/MY9_SNP距离.phylip（成对距离）; results/coresnp/MY9_紧克隆成员.tsv（组员）;
-      results/MY9_分型矩阵.tsv（基因型/年份/国家/ST）; MY9_下载清单_v1_backup.csv（回填批识别）;
-      results/coresnp/MY9_coreSNP_NJ.nwk + results/coresnp/treetime/ST3_subtree.nwk（拓扑）。
-输出: results/coresnp/MY9_簇亚结构与采样敏感性.md / .tsv
+Input: the core-SNP SNP distance matrix under results/coresnp/ (pairwise distances); the tight-clone membership
+      table under results/coresnp/ (group members); the integrated per-genome typing matrix under results/
+      (genotype/year/country/ST); the v1 backup download manifest (backfill-batch identification);
+      the core-SNP NJ tree and the ST3 subtree under results/coresnp/ (topology).
+Output: a Markdown report and a TSV table covering the cluster sub-structure and sampling sensitivity, written under results/coresnp/.
 """
 import csv
 from collections import Counter, defaultdict
@@ -35,7 +36,7 @@ members = [r["ena_acc"] for r in csv.DictReader(
     open(CS / "MY9_紧克隆成员.tsv", encoding="utf-8-sig"), delimiter="\t")]
 assert len(members) == 352, f"clone members {len(members)} != 352"
 
-# ---- 成对距离（phylip 变体: "acc\td1 d2 ..." 每行全量, 同 MY9_24 解析口径） ----
+# ---- Pairwise distances (phylip variant: "acc\td1 d2 ..." with a full row per genome, same parsing convention as MY9_24) ----
 L = open(CS / "MY9_SNP距离.phylip", encoding="utf-8").read().strip().splitlines()
 n = int(L[0].split()[0])
 accs, D = [], {}
@@ -51,7 +52,7 @@ _idx = {a: i for i, a in enumerate(accs)}
 def dist(a, b):
     return D[a][_idx[b]] if _idx[b] in D[a] else D[b][_idx[a]]
 
-# ---- A. 组内亚结构 ----
+# ---- A. Within-group sub-structure ----
 def single_linkage(items, thr):
     parent = {x: x for x in items}
     def find(x):
@@ -99,11 +100,11 @@ for thr in (10, 15, 20):
     summary[thr] = {"big": big, "waves": waves_big}
     lines_md.append("")
 
-# ---- B. 采样敏感性 Fitch ----
-# 回填批识别（单源）: v1_backup 下载清单 included=1（532 株预回填面板）与当前面板的集合差
+# ---- B. Sampling-sensitivity Fitch ----
+# Backfill-batch identification (single source): set difference between the v1_backup download manifest, included=1 (532 genomes in the pre-backfill panel), and the current panel
 led = list(csv.DictReader(open(BASE / "MY9_下载清单_v1_backup.csv", encoding="utf-8-sig")))
 pre_panel = {r["ena_acc"] for r in led if r["included"] == "1" and r["trio_ok"] == "1"}
-recovered = {a for a in set(mat) - pre_panel}  # 回填批 = 当前面板 − v1 入组集合
+recovered = {a for a in set(mat) - pre_panel}  # backfill batch = current panel − v1 included set
 lines_md += ["## B. 祖先态重建采样敏感性（同拓扑剪枝对照）", "",
              f"- ENA 回填批（v1 面板 included=1 共 {len(pre_panel)} 株之外, 当前在面板的回填株）: {len(recovered)} 株"]
 
@@ -112,8 +113,8 @@ def tip_state(a):
     return g if g in ("A", "G", "T", "C") else None
 
 def fitch_changes(tree_obj):
-    """2063 位点 Fitch（与 MY9_26/MY9_29 同算法）: 后序自底向上, 子集交集空即并集并 +1 变化。
-    状态 = site2063 碱基; 缺失/未 call 叶 = 未知（None, 跳过）。"""
+    """Fitch for site 2063 (same algorithm as MY9_26/MY9_29): post-order, bottom-up; when the intersection of the child sets is empty, take the union and add 1 change.
+    State = the site2063 base; missing/uncalled leaves are unknown (None, skipped)."""
     state, changes = {}, 0
     for nd in tree_obj.find_clades(order="postorder"):
         if nd.is_terminal():

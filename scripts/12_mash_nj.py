@@ -1,19 +1,23 @@
 # -*- coding: utf-8 -*-
-"""12_mash_nj.py — 全基因组距离系统发生过渡产物（numpy + 标准库）
-定位: 正式 core-SNP 系统发生（snippy→IQ-TREE→TreeTime）需服务器 gate; 本脚本先用
-      Mash 距离 + NJ + root-to-tip 给出时间信号先导证据（论文 Methods 中标注为
-      whole-genome k-mer distance phylogeny, 与 core-SNP 树互验）。
-输入: ../data/fasta/*.fna + ../results/MY9_分型矩阵.tsv（年份/ST/resist 注释）
-输出: results/MY9_mash距离.phylip（全矩阵, 带缓存复用）
-      results/MY9_NJ_tree.nwk（中点定根）
-      results/MY9_root_to_tip.tsv（tip 名, 年份, ST, 耐药, root_dist）
-      控制台: root-to-tip 回归（全株 / ST 分层）R² 与斜率
+"""12_mash_nj.py — Whole-genome distance phylogeny transition product (numpy + standard library)
+Positioning: the formal core-SNP phylogeny (snippy→IQ-TREE→TreeTime) requires a server gate; this
+      script first delivers preliminary temporal-signal evidence from Mash distance + NJ +
+      root-to-tip (labelled in the paper's Methods as whole-genome k-mer distance phylogeny and
+      cross-validated against the core-SNP tree).
+Input: ../data/fasta/*.fna + the integrated typing matrix under ../results/ (year/ST/resistance annotations)
+Output: the Mash distance matrix under results/ (full matrix, PHYLIP format, cached for reuse)
+      results/MY9_NJ_tree.nwk (midpoint-rooted)
+      results/MY9_root_to_tip.tsv (tip name, year, ST, resistance, root_dist)
+      console: root-to-tip regression (all isolates / ST strata) R² and slope
 
-方法:
-  sketch（v2）: 位置无关哈希阈值采样——2-bit 打包 21-mer, Knuth 多重混洗后 < 阈值者入 sketch
-    （v1 定距 stride 采样在任何 1 nt 位移/contig 边界差下 J 崩溃: 实测 J=0.08 vs 全集真值 0.9985, 已废弃）
-  distance: d = -ln(2J/(1+J))/21（Mash 公式）
-  NJ: 标准算法; 中点定根（显式在 u-v 路径中点插入根节点）; Newick 输出
+Methods:
+  sketch (v2): position-independent hash-threshold sampling — 2-bit packed 21-mers; after Knuth
+    multiplicative hashing, those below the threshold enter the sketch
+    (v1 fixed-stride sampling collapsed J under any 1 nt shift or contig-boundary difference:
+     measured J=0.08 vs. the full-set truth of 0.9985, deprecated)
+  distance: d = -ln(2J/(1+J))/21 (Mash formula)
+  NJ: standard algorithm; midpoint rooting (root node inserted explicitly at the midpoint of the
+    u-v path); Newick output
 """
 import csv, glob, math, os, sys, time, collections
 
@@ -22,11 +26,11 @@ import numpy as np
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RESDIR = os.path.join(BASE, "results")
 K = 21
-SKETCH_FRAC = 0.05          # 保留 ~5% k-mer → ~40k/株
+SKETCH_FRAC = 0.05          # keep ~5% of k-mers → ~40k per isolate
 GOLD = 0x9E3779B1
 MASK32 = 0xFFFFFFFF
 
-TBL = np.full(256, 255, dtype=np.uint8)   # 默认 255 = 模糊/非法 → 含它的 k-mer 丢弃
+TBL = np.full(256, 255, dtype=np.uint8)   # default 255 = ambiguous/invalid → any k-mer containing it is dropped
 for i, b in enumerate("ACGT"):
     TBL[ord(b)] = i
     TBL[ord(b.lower())] = i
@@ -40,7 +44,7 @@ def load_codes(path):
     return TBL[arr]
 
 def sketch(codes):
-    """位置无关哈希阈值 sketch（canonical 2-bit 打包 21-mer, 保留 hash<阈值者）→ set(uint64)"""
+    """Position-independent hash-threshold sketch (canonical 2-bit packed 21-mers, keep those with hash<threshold) → set(uint64)"""
     n = len(codes)
     W = n - K + 1
     if W <= 0:
@@ -50,10 +54,10 @@ def sketch(codes):
     rpacks = np.zeros(W, dtype=np.uint64)
     for j in range(K):
         packs += c[j:j + W] << np.uint64(2 * (K - 1 - j))
-        rpacks += (np.uint64(3) - c[j:j + W]) << np.uint64(2 * j)   # 反向互补等价打包
+        rpacks += (np.uint64(3) - c[j:j + W]) << np.uint64(2 * j)   # reverse-complement-equivalent packing
     canon = np.minimum(packs, rpacks)
     cs = np.concatenate(([0], np.cumsum((codes == 255).astype(np.int64))))
-    badcnt = cs[K:] - cs[:W]          # 窗口内模糊码计数
+    badcnt = cs[K:] - cs[:W]          # count of ambiguous codes per window
     canon = canon[badcnt == 0]
     h = ((canon * np.uint64(GOLD)) & np.uint64(MASK32)).astype(np.float64) / 4294967296.0
     return set(canon[h < SKETCH_FRAC].tolist())
@@ -144,14 +148,14 @@ while len(active) > 2:
         D2[a][nid] = dnew
     D2[nid][nid] = 0.0
     active = [a for a in active if a not in (bi, bj)] + [nid]
-# 最后二连
+# Final pair
 a, b = active
 dab = D2[a][b]
 root_id = next_id; next_id += 1
 br[root_id] = [(a, dab / 2), (b, dab / 2)]
 print(f"NJ done in {time.time()-t0:.0f}s", flush=True)
 
-# 递归构造 Newick（带长度）
+# Recursively build Newick (with branch lengths)
 def build(node):
     if node_name.get(node):
         return node_name[node]
@@ -165,8 +169,8 @@ with open(os.path.join(RESDIR, "MY9_NJ_tree.nwk"), "w", encoding="utf-8") as f:
     f.write(tree + "\n")
 print("newick written", flush=True)
 
-# --- 中点定根 + root-to-tip ---
-# 两遍 DFS 求 node 深度（无向树）
+# --- Midpoint rooting + root-to-tip ---
+# Two-pass DFS to compute node depths (undirected tree)
 adj = collections.defaultdict(list)
 for node, children in br.items():
     for c, L in children:
@@ -187,7 +191,8 @@ def farthest(start):
 
 u, _ = farthest(root_id)
 v, diam = farthest(u)
-# u-v 路径上距两端各 diam/2 的点 = 中点; 简化: 以 u 为根计算 root-to-tip, 再减 offset
+# The point on the u-v path lying diam/2 from either end = midpoint; simplification: compute
+# root-to-tip with u as the root, then subtract the offset
 def depths_from(src):
     dist = {src: 0.0}
     stack = [src]
@@ -201,7 +206,7 @@ def depths_from(src):
 du = depths_from(u)
 dv = depths_from(v)
 id_of = {names[i]: i for i in range(n)}
-# root-to-tip(以 u-v 中点为根): d_mid(t) = (du[t] + dv[t] - diam)/2
+# root-to-tip (rooted at the u-v midpoint): d_mid(t) = (du[t] + dv[t] - diam)/2
 mat = {}
 with open(os.path.join(RESDIR, "MY9_分型矩阵.tsv"), encoding="utf-8-sig") as f:
     for r in csv.DictReader(f, delimiter="\t"):

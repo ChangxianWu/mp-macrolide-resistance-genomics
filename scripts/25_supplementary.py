@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""25_supplementary.py — 补充材料生成（补充表 S1）
-生成: 投稿材料包/02_附件与清单/MY9_Supplementary_TableS1_genome_metadata.docx
-      （按当前分型矩阵动态生成的完整元数据 + 分型结果, 与稿件引用闭环）
-依赖: docx 模块从 CV2 项目复制（与稿件生成器一致）
+"""25_supplementary.py — Supplementary material generation (Supplementary Table S1)
+Generates: MY9_Supplementary_TableS1_genome_metadata.docx in the submission package's attachments and checklist folder
+      (full metadata + typing results generated dynamically from the current typing matrix, closing the loop with manuscript citations)
+Dependency: the docx module is copied from the CV2 project (consistent with the manuscript generator)
 """
 import csv, os
 
@@ -11,7 +11,7 @@ RES = os.path.join(BASE, "results")
 PACK = os.path.join(BASE, "投稿材料包")
 ATT = os.path.join(PACK, "02_附件与清单")
 os.makedirs(ATT, exist_ok=True)
-# 补充表用 python-docx（补充件与其他课题同惯例; JS docx 仅用于主稿生成器）
+# Supplementary tables use python-docx (consistent with the supplement convention of other projects; the JS docx is used only by the main-manuscript generator)
 import docx as pydocx
 from docx.shared import Pt, Inches
 from docx.enum.section import WD_ORIENT
@@ -22,7 +22,7 @@ mat = list(csv.DictReader(open(os.path.join(RES, "MY9_分型矩阵.tsv"), encodi
 mat.sort(key=lambda r: (r["country"], r["year"], r["ena_acc"]))
 
 doc = pydocx.Document()
-# 横向 + 窄边距：11 列表格在纵向页被压缩成 30 页乱码（ScholarOne 校样实测），横向后单行不折行
+# Landscape + narrow margins: an 11-column table compressed onto portrait pages produced 30 pages of garbled output (observed in ScholarOne proofs); landscape keeps every row unbroken
 sec = doc.sections[0]
 sec.orientation = WD_ORIENT.LANDSCAPE
 sec.page_width, sec.page_height = Inches(11), Inches(8.5)
@@ -38,7 +38,7 @@ doc.add_paragraph(
     "the public eight-locus MLST scheme (nearest-neighbour fallback marked)."
     % len(mat)).style.font.size = Pt(9)
 
-# 元数据富集: 从下载清单 + 入组池 join (仅透传提交方原文, 不编造; 规则 11/33)
+# Metadata enrichment: join from the download manifest + inclusion pool (pass through submitter text only, no fabrication; rules 11/33)
 dl_map = {}
 with open(os.path.join(BASE, "MY9_下载清单.csv"), encoding="utf-8-sig") as f:
     for r in csv.DictReader(f):
@@ -62,7 +62,7 @@ hdr = ["ENA accession", "Assembly", "Country", "Year", "Host / source",
 tbl = doc.add_table(rows=1, cols=len(hdr))
 tbl.style = "Table Grid"
 tbl.autofit = False
-# 固定列宽（合计 9.8 in，横向可用宽度 10 in）：避免自动布局把登录号/年份挤成断行
+# Fixed column widths (9.8 in total, against 10 in usable landscape width): prevents automatic layout from squeezing accessions/years into wrapped lines
 COLW = [1.1, 1.35, 1.15, 0.45, 2.35, 0.5, 0.5, 0.5, 0.75, 0.55, 0.6]
 for i, w in enumerate(COLW):
     tbl.columns[i].width = Inches(w)
@@ -73,7 +73,7 @@ for i, h in enumerate(hdr):
     for run in c.paragraphs[0].runs:
         run.bold = True
         run.font.size = Pt(8)
-# 跨页重复表头 + 行不跨页断开
+# Repeat the header across pages + keep rows from splitting across pages
 trPr = tbl.rows[0]._tr.get_or_add_trPr()
 trPr.append(OxmlElement("w:tblHeader"))
 for r in mat:

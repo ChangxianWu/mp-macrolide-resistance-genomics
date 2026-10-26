@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-"""19b_treetime_report.py — 定年稳健性报告（网格汇总 + 边际重建 CI）
-输入: results/coresnp/treetime/{ST3_subtree.nwk, ST3.aln.fasta, ST3_dates.csv, tt_summary.tsv}
-方法: 逐设置读取网格结果; 对最稳健设置（noprior_oldest）追加 marginal=True 重建,
-      取根 / A2063G 耐药支系 MRCA / 2023+ 波 MRCA 的 90% 最大后验区间。
-输出: results/coresnp/MY9_TreeTime定年报告.md
+"""19b_treetime_report.py — dating robustness report (grid summary + marginal reconstruction CIs)
+Inputs: results/coresnp/treetime/{ST3_subtree.nwk, ST3.aln.fasta, ST3_dates.csv, tt_summary.tsv}
+Method: read the grid results setting by setting; for the most robust setting (noprior_oldest) add a
+      marginal=True reconstruction and take the 90% maximum posterior regions of the root / the
+      A2063G resistance clade MRCA / the 2023+ wave MRCA.
+Output: the TreeTime dating report (Markdown) under results/coresnp/
 """
 import csv, os
 import numpy as np
@@ -14,7 +15,7 @@ RESDIR = os.path.join(BASE, "results")
 CS = os.path.join(RESDIR, "coresnp")
 TTDIR = os.path.join(CS, "treetime")
 CORE_SITES = 742308
-SITE2063_COL = None  # 由 core 掩码计算
+SITE2063_COL = None  # computed from the core mask
 
 import glob
 accs_all = [os.path.basename(p)[:-4] for p in sorted(glob.glob(os.path.join(CS, "alleles", "*.npy")))]
@@ -56,7 +57,7 @@ except Exception:
     _ref_txt += "（见 Table 5）"
 lines.append(f"- {_ref_txt}" + chr(10))
 
-# --- 边际重建（仅最稳健设置）---
+# --- marginal reconstruction (most robust setting only) ---
 lines.append("\n## 二、边际重建 90% 后验区间（设置 noprior_oldest）\n")
 try:
     tt = TreeTime(gtr="Jukes-Cantor", tree=os.path.join(TTDIR, "ST3_subtree.nwk"),

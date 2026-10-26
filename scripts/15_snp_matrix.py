@@ -1,15 +1,19 @@
 # -*- coding: utf-8 -*-
-"""15_snp_matrix.py — 本地 core-SNP stage 2：核心位点组装 + SNP 距离 + NJ + root-to-tip
-输入: results/coresnp/alleles/*.npy（MY9_14 产物, 0=A 1=C 2=G 3=T 4=缺失/掩蔽）
-      + results/MY9_分型矩阵.tsv（年份/ST/耐药注释） + results/MY9_mash距离.phylip（互验）
-输出: results/coresnp/MY9_SNP距离.phylip
-      results/coresnp/MY9_coreSNP_NJ.nwk（中点定根）
-      results/coresnp/MY9_coreSNP_root_to_tip.tsv
-      results/coresnp/MY9_coreSNP_摘要.md
-方法:
-  core = 非缺失株比例 ≥95% 的参考位点（indel±8nt/重复区/结构断点已在 stage1 掩蔽为 4）
-  距离 = core 位点上等位不同的计数（成对缺失按不计入处理: 任一方为 4 的位点不比较）
-  NJ/中点定根/root-to-tip 同 MY9_12; 另报 SNP 距离 vs Mash 距离 Spearman 相关（互验）。
+"""15_snp_matrix.py — local core-SNP stage 2: core-site assembly + SNP distance + NJ + root-to-tip
+Input: results/coresnp/alleles/*.npy (MY9_14 products, 0=A 1=C 2=G 3=T 4=missing/masked)
+      + the integrated typing matrix under results/ (year/ST/resistance annotations)
+      + the Mash distance matrix under results/ (cross-check)
+Output: the SNP distance matrix under results/coresnp/ (PHYLIP format)
+      the midpoint-rooted core-SNP NJ tree under results/coresnp/
+      the core-SNP root-to-tip table under results/coresnp/
+      the core-SNP run summary markdown under results/coresnp/
+Methods:
+  core = reference sites present (non-missing) in ≥95% of isolates (indels ±8nt / repeat regions /
+    structural breakpoints were already masked as 4 in stage 1)
+  distance = count of differing alleles over core sites (pairwise missing data excluded: sites where
+    either side is 4 are not compared)
+  NJ / midpoint rooting / root-to-tip as in MY9_12; additionally reports the Spearman correlation
+    between SNP distance and Mash distance (cross-check).
 """
 import csv, glob, math, os, time, collections
 
@@ -32,16 +36,17 @@ core_mask = (M < 4).sum(axis=0) >= int(0.95 * n)
 C = M[:, core_mask]
 core_len = C.shape[1]
 print(f"core sites (>=95% taxa covered): {core_len}", flush=True)
-# 低覆盖株剔除（组装质量差, 成对可比位点过少 → 距离不可比）: 树/回归用 subset
+# Drop low-coverage isolates (poor assembly quality, too few pairwise comparable sites → distances
+# are not comparable): tree/regression use this subset
 genome_cov = (M < 4).mean(axis=1)
 keep_g = genome_cov >= 0.80
 print(f"genomes with coverage>=0.80: {int(keep_g.sum())}/{n}（低覆盖剔除出树/回归）", flush=True)
-# 变异位点数（速览, 双方可比才计）:
+# Number of variable sites (quick overview, counted only where both sides are comparable):
 first = 0
 v0 = (C != C[first]) & (C < 4)[first][None, :] & (C < 4)
 print(f"variable vs first genome (comparable only): {int(v0.any(axis=0).sum())}", flush=True)
 
-# --- 成对 SNP 距离（缺失不计入; 按可比位点数归一化为替换/位点） ---
+# --- Pairwise SNP distances (missing data excluded; normalized by comparable site count to substitutions/site) ---
 print("pairwise SNP distances...", flush=True)
 t0 = time.time()
 idx_keep = np.nonzero(keep_g)[0]
@@ -75,7 +80,7 @@ with open(os.path.join(CS, "MY9_SNP距离.phylip"), "w", encoding="utf-8") as f:
         f.write(accs_k[i] + "\t" + " ".join(f"{D[i,j]:.6f}" for j in range(nk)) + "\n")
 print("phylip written", flush=True)
 
-# --- NJ（与 MY9_12 同算法） ---
+# --- NJ (same algorithm as MY9_12) ---
 print("NJ tree building...", flush=True)
 t0 = time.time()
 active = list(range(nk))
@@ -122,7 +127,7 @@ def build(node):
 with open(os.path.join(CS, "MY9_coreSNP_NJ.nwk"), "w", encoding="utf-8") as f:
     f.write(build(root_id) + ";\n")
 
-# --- 中点定根 + root-to-tip ---
+# --- Midpoint rooting + root-to-tip ---
 import collections
 adj = collections.defaultdict(list)
 for node, children in br.items():
@@ -179,7 +184,7 @@ def regress(pred):
     syy = sum((y - my) ** 2 for _, y in pts)
     return len(pts), sxy / sxx, (sxy * sxy) / (sxx * syy)
 
-# --- Mash 互验 ---
+# --- Mash cross-check ---
 mash = {}
 lines = open(os.path.join(RESDIR, "MY9_mash距离.phylip"), encoding="utf-8").read().strip().splitlines()
 mnames = [ln.split("\t")[0] for ln in lines[1:]]

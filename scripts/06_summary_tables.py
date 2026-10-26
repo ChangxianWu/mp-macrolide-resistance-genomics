@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""06_summary_tables.py — 耐药突变频率×时间×地理 汇总表
-输入: ../results/MY9_23S分型.tsv (04 产物)
-输出: ../results/MY9_耐药频率_按年份.tsv
-      ../results/MY9_耐药频率_按国家.tsv
-      ../results/MY9_W2_摘要.md
-站点命名: 文献编号 A2063G/A2064G/C2617(切片位=文献位+64, 见校准报告)。
-注意: 2063 与 2064 的 WT 碱基同为 A, 分型 TSV 的 site 列已按位点分开, 汇总按列统计。
+"""06_summary_tables.py — resistance mutation frequency × time × geography summary tables
+Input: the per-genome 23S typing matrix under results/ (output of step 04)
+Output: the per-year resistance-frequency table under results/
+        the per-country resistance-frequency table under results/
+        the W2 summary Markdown under results/
+Site naming: literature numbering A2063G/A2064G/C2617 (slice position = literature position + 64, see the calibration report).
+Note: the WT base at 2063 and 2064 is A in both cases; the site column of the typing TSV is already split per position, so the summary is computed per column.
 """
 import csv, os, collections
 
@@ -67,7 +67,7 @@ def write_table(path, groups, rows_groups, title):
                         c["n_2063only"], c["n_2063_2064"], c["n_2063_2617"], c["n_2064only"], c["n_2617only"]])
     print("written:", path)
 
-# --- 按年份 ---
+# --- by year ---
 by_year = collections.defaultdict(list)
 for r in rows:
     y = r["year"].strip()
@@ -76,7 +76,7 @@ for r in rows:
 years = sorted(by_year)
 write_table(os.path.join(RESDIR, "MY9_耐药频率_按年份.tsv"), years, by_year, "by year")
 
-# --- 按国家 ---
+# --- by country ---
 by_ctry = collections.defaultdict(list)
 for r in rows:
     cc = r["country"].split(":")[0].strip()
@@ -85,7 +85,7 @@ for r in rows:
 ctries = sorted(by_ctry, key=lambda k: -len(by_ctry[k]))
 write_table(os.path.join(RESDIR, "MY9_耐药频率_按国家.tsv"), ctries, by_ctry, "by country")
 
-# --- 摘要 md ---
+# --- summary markdown ---
 tot = aggregate(rows)
 top = [(y, aggregate(by_year[y])) for y in years if len(by_year[y]) >= 10]
 tct = [(k, aggregate(by_ctry[k])) for k in ctries if len(by_ctry[k]) >= 10]

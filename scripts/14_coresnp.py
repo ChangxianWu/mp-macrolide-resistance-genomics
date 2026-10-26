@@ -1,16 +1,20 @@
 # -*- coding: utf-8 -*-
-"""14_coresnp.py — 本地 core-SNP stage 1：参考锚链法逐株变异 calling（自研, 替代 snippy）
+"""14_coresnp.py — local core-SNP stage 1: per-isolate variant calling via reference anchor chaining (in-house, replaces snippy)
 
-背景: snippy 不可用（WSL 启动挂死 / GitHub 封锁 / minimap2·mappy 均无 Windows 发行）——
-      本机内存 + numpy/Biopython 足以支撑 0.8 Mb 基因组 × 646 assemblies 的 contig-vs-reference 比对。
-方法（MUMmer 同款策略）:
-  1) 参考唯一 25-mer 索引（正向 2-bit 打包, 参考内仅出现一次）
-  2) 每株: 正/反向两组 25-mer 打包查索引（qry 内任一方向多拷贝者弃）→ (ref_pos, qry_pos, strand) 锚
-  3) 同链锚链化（ref 同向递增且 qry 沿链方向单调）→ 链内相邻锚空隙:
-       等长 → numpy 直比（SNP 直出）; 不等长且两侧 ≤3000 nt → Biopython NW（indel ±8 nt 掩蔽）;
-       任一侧 >3000 nt → 未覆盖（结构差异/组装断点/重复区）
-  4) 产物: 每株 816,394 位点等位向量（0=A,1=C,2=G,3=T,4=未覆盖/掩蔽）→ results/coresnp/alleles/<acc>.npy
-     + results/coresnp/calling_summary.tsv（断点续跑: 已完成株跳过）
+Background: snippy is unavailable (WSL hangs on startup / GitHub is blocked / neither minimap2 nor
+      mappy ships a Windows build) — local memory + numpy/Biopython are sufficient for
+      contig-vs-reference alignment of 0.8 Mb genomes × 646 assemblies.
+Methods (same strategy as MUMmer):
+  1) Reference-unique 25-mer index (forward 2-bit packing; occurs exactly once in the reference)
+  2) Per isolate: query the index with both the forward and reverse sets of packed 25-mers
+     (discard any query side with multiple copies) → (ref_pos, qry_pos, strand) anchors
+  3) Chain anchors on the same strand (ref increasing in the forward direction and qry monotonic
+     along the strand direction) → gaps between adjacent anchors within a chain:
+       equal length → direct numpy comparison (SNPs come out directly); unequal length and both
+       sides ≤3000 nt → Biopython NW (indel ±8 nt masked); either side >3000 nt → uncovered
+       (structural difference / assembly breakpoint / repeat region)
+  4) Products: per-isolate 816,394-site allele vector (0=A,1=C,2=G,3=T,4=uncovered/masked) → results/coresnp/alleles/<acc>.npy
+     + results/coresnp/calling_summary.tsv (resumable: isolates already finished are skipped)
 """
 import glob, os, re, time
 
@@ -76,8 +80,10 @@ def call_snps(ref_codes, qry_codes, uvals, upos):
     qry_f, qry_r = pack_windows(qry_codes)
     if len(qry_f) == 0:
         return allele, stats
-    # 拷贝数感知的唯一性阈值: 双基因组混合组装(len≈2×816kb)中每 k-mer 出现 ≈2 次,
-    # 按"仅一次"过滤会把整株杀成零锚 —— 阈值 = 拷贝数（单拷贝基因组退化为 cnt==1, 与原始行为一致）
+    # Copy-number-aware uniqueness threshold: in a mixed assembly of two genomes (len≈2×816kb)
+    # each k-mer occurs ≈2 times, so filtering on "exactly once" would kill the whole isolate down
+    # to zero anchors — threshold = copy number (single-copy genomes degrade to cnt==1, matching the
+    # original behaviour)
     copies = max(1, int(round(len(qry_codes) / 816394)))
     max_cnt = copies
     allv = np.concatenate([qry_f, qry_r])
@@ -118,9 +124,12 @@ def call_snps(ref_codes, qry_codes, uvals, upos):
         chains.append((strand, A[cur]))
 
     def fill_anchor(strand, rp, qp):
-        # 锚匹配（正/反向）在"对齐链投影"下均为恒等: 反向锚 rc(qry 窗)==ref 窗
-        # ⇒ 对齐碱基 = comp(qry[qp+K-1-j]) = ref[rp+j]。等位存对齐链投影碱基, 故正反锚都填参考碱基。
-        # （旧版反向填 3-ref 是把"contig 反向"误当"生物学反转"——对反向 contig 基因组会产生 ~50% 假差异）
+        # Anchor matches (forward/reverse) are identical under the "alignment-chain projection":
+        # a reverse anchor satisfies rc(qry window)==ref window
+        # ⇒ aligned base = comp(qry[qp+K-1-j]) = ref[rp+j]. Alleles store the aligned-chain
+        # projection base, so both forward and reverse anchors are filled with the reference base.
+        # (The old version filled 3-ref for reverse anchors, mistaking a "reverse-complement contig"
+        # for a "biological inversion" — that produced ~50% false differences on RC-contig genomes.)
         allele[rp:rp + K] = ref_codes[rp:rp + K]
 
     for strand, blk in chains:
@@ -161,7 +170,7 @@ def call_snps(ref_codes, qry_codes, uvals, upos):
                 stats["snp"] += int(diff.sum())
             else:
                 if g_ref == 0 or g_qry == 0:
-                    # 纯插入/缺失: 掩蔽事件邻域（该区不进 core）
+                    # Pure insertion/deletion: mask the neighbourhood of the event (this region does not enter the core)
                     lo = max(0, rs - INDEL_FLANK)
                     hi = min(n_ref, rs + max(g_ref, 1) + INDEL_FLANK)
                     allele[lo:hi] = 4

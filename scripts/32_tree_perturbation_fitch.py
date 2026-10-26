@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
-"""32_tree_perturbation_fitch.py — 树不确定性下的 A2063 祖先重建稳健性
+"""32_tree_perturbation_fitch.py — Robustness of A2063 ancestral reconstruction under tree uncertainty
 
-动机（第四轮评审 P2）: "对 ST3 内 6 处变更做树不确定性稳健性检验（对关键分支 bootstrap
-或对树扰动重跑 Fitch，证明 6 处与克隆基部单次获得结论稳定）"。
-方法: 对 core-SNP NJ 树施加随机 NNI 扰动（5 档强度 × 3 重复, 共 15 棵扰动树）,
-每棵树重跑三项 Fitch 指标并与真实树对照:
-  1) 全树 2063 位点最小变更数;
-  2) ST3 诱导子树内变更数（诱导子树按 MLST ST3 成员提取, 链压缩）;
-  3) 克隆单次获得检验 — 克隆成员置 G、其余全部置未知, Fitch 所需"变为 G"的边数
-     （0 = 克隆基因型与"祖先支一次获得"相容, 且任何必需变更边都不指向克隆成员）。
-输出: results/coresnp/MY9_树稳健性_扰动.md + MY9_树稳健性_扰动.tsv
+Motivation (fourth review round, P2): "run a robustness check of the 6 changes within ST3 against tree
+uncertainty (bootstrap the key branches, or re-run Fitch on perturbed trees, to show that the 6 changes and the single acquisition at the clone base are stable conclusions)".
+Method: apply random NNI perturbations to the core-SNP NJ tree (5 intensity levels × 3 replicates, 15 perturbed trees in total);
+re-run the three Fitch metrics on each tree and compare them with the observed tree:
+  1) minimum number of changes at site 2063 over the whole tree;
+  2) number of changes within the ST3-induced subtree (the induced subtree is extracted from the MLST ST3 members, with chains collapsed);
+  3) single-acquisition test for the clone — set clone members to G and everything else to unknown; the number of edges on which Fitch must "change to G"
+     (0 = the clone genotype is compatible with "a single acquisition on the ancestral branch", and no required change edge points to a clone member).
+Output: a Markdown report and a TSV table of the tree-perturbation results under results/coresnp/.
 """
 import copy
 import csv
@@ -63,7 +63,7 @@ def fitch_edges(tree, states):
 
 
 def induced(tree, members):
-    """提取包含 members 的最小诱导子树（等价拓扑, 链压缩）; 返回新 Phylo.Tree。"""
+    """Extract the minimal induced subtree spanning `members` (equivalent topology, chains collapsed); returns a new Phylo.Tree."""
     keep = set(members)
 
     def build(nd):
@@ -85,7 +85,7 @@ def induced(tree, members):
 
 
 def perturb(tree, n_swaps, rng):
-    """随机 NNI: 选内点 v(非根) 与其兄弟 s, 交换 v 的一个孩子与 s。"""
+    """Random NNI: pick an internal node v (not the root) and its sibling s, then swap one child of v with s."""
     t = copy.deepcopy(tree)
     parent = {c: p for p in t.find_clades() for c in p.clades}
     internals = [nd for nd in t.get_nonterminals() if nd is not t.root and len(nd.clades) >= 2]
@@ -112,7 +112,7 @@ st = {a: (mat.get(a, {}).get("site2063") or "?") for a in tips}
 st3_tips = [a for a in tips if mat.get(a, {}).get("MLST_ST") == "3"]
 st3_set = set(st3_tips)
 
-# --- 真实树点估计 ---
+# --- Point estimates on the observed tree ---
 real_edges, _, _ = fitch_edges(tree, st)
 n_real_total = len(real_edges)
 t3 = induced(tree, st3_tips)

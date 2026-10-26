@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""02b_download_ena.py — ENA Browser API 批量下载 FASTA（幂等可续传）
-用法: python MY9_02b_download_ena.py [--included-only] [--workers 5]
-输出: ../data/fasta/<ena_acc>.fna + ../download_log.tsv
+"""02b_download_ena.py — Batch download of FASTA files via the ENA Browser API (idempotent and resumable)
+Usage: python MY9_02b_download_ena.py [--included-only] [--workers 5]
+Output: ../data/fasta/<ena_acc>.fna + ../download_log.tsv
 """
 import argparse, concurrent.futures as cf, csv, os, time, urllib.request
 

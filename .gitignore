@@ -7,20 +7,19 @@ venv/
 # Tool state (security hook)
 .mimosa/
 
-# Generated data and results (not redistributed)
+# Raw data and generated outputs (never committed)
 data/*
 !data/README.md
 downloads/
 reference/
 results/
-manuscript/tables/
-manuscript/figures/
-manuscript/render*/
+outputs/
+manuscript/
+
+# Documents
 *.docx
 *.pdf
 *.zip
-*.tsv
-*.csv
 
 # OS / editors
 .DS_Store

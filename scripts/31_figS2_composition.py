@@ -1,14 +1,17 @@
 # -*- coding: utf-8 -*-
 """31_figS2_composition.py — Supplementary Figure S2: epidemic-clone composition
 
-由来: Figure 3 重设计时，克隆组成仪表板从主图下沉为补充图——主图改为系统发生 + 变化事件，
-      组成属描述性统计，放补充图更合适，且原四个小柱图（其中 P1 type 仅一根柱）信息密度过低。
-改进: 年份/国家/MLST 三面板均标注计数与百分比; P1 型与 2063 基因型画成两条
-      100% 堆叠条（单段满条本身即"组成完全均一"的视觉结论）, 下方要点句取数 Table 4;
-      标题改为面板级（避免旧版标题叠字）。
-单源: results/coresnp/MY9_紧克隆成员.tsv（成员）+ results/MY9_分型矩阵.tsv（株级属性）+
-      manuscript/tables/table4_clone.csv（规模与耐药比例）。
-输出: manuscript/figures/MY9_FigS2_clone_composition.png / .pdf
+Rationale: when Figure 3 was redesigned, the clone-composition dashboard was demoted from the main
+      figure to a supplementary figure — the main figure became phylogeny + change events;
+      composition is descriptive statistics and therefore fits better in the supplement, and the
+      original four small bar charts (one of which, P1 type, had only a single bar) had too low an information density.
+Improvements: the year/country/MLST panels are all annotated with counts and percentages; P1 type and the 2063 genotype are drawn as two
+      100% stacked bars (a single full-width segment is itself the visual conclusion that the composition is perfectly homogeneous), and the takeaway sentence below draws its values from Table 4;
+      titles moved to panel level (to avoid overlapping text in the previous version).
+Single source: the tight-clone membership table under results/coresnp/ (members) + the integrated per-genome
+      typing matrix under results/ (strain-level attributes) +
+      manuscript/tables/table4_clone.csv (size and resistance proportion).
+Output: manuscript/figures/MY9_FigS2_clone_composition.png / .pdf
 """
 import csv
 import textwrap
@@ -35,7 +38,7 @@ def cnorm(c):
 
 
 def disp_st(k):
-    """ST 展示命名规范化（评审 P2; 与 MY9_24 同口径）。"""
+    """Normalize the displayed ST naming (review P2; same convention as MY9_24)."""
     if k.startswith("uncertain(near "):
         return k.replace("uncertain(near ", "").rstrip(")") + "-related"
     if k.startswith("novel(near "):
@@ -61,7 +64,7 @@ fig = plt.figure(figsize=(11.5, 7.0))
 gs = fig.add_gridspec(2, 2, hspace=0.55, wspace=0.30,
                       left=0.075, right=0.975, top=0.86, bottom=0.075)
 
-# (A) 年份
+# (A) Collection year
 ax = fig.add_subplot(gs[0, 0])
 ks = sorted(years)
 ax.bar([str(k) for k in ks], [years[k] for k in ks], color=C_CLONE, alpha=0.9)
@@ -74,7 +77,7 @@ ax.tick_params(labelsize=9.5, rotation=45)
 ax.set_ylim(0, max(years.values()) * 1.14)
 ax.spines[["top", "right"]].set_visible(False)
 
-# (B) 国家/地区
+# (B) Country/region
 ax = fig.add_subplot(gs[0, 1])
 top = ctry.most_common(6)
 ys = list(range(len(top)))[::-1]
@@ -90,7 +93,7 @@ ax.set_title("(B) Country or region", fontsize=11.5, loc="left")
 ax.tick_params(labelsize=9.5)
 ax.spines[["top", "right"]].set_visible(False)
 
-# (C) MLST 序列型
+# (C) MLST sequence type
 ax = fig.add_subplot(gs[1, 0])
 tops = st.most_common(4)
 xs = range(len(tops))
@@ -106,8 +109,8 @@ ax.set_title("(C) MLST sequence type", fontsize=11.5, loc="left")
 ax.tick_params(labelsize=9.5)
 ax.spines[["top", "right"]].set_visible(False)
 
-# (D) P1 型 + 2063 基因型: 两条 100% 堆叠条（组成均一性即结论; 段循环通用化,
-#     若未来分组多于一段自动分色/外置标注）
+# (D) P1 type + 2063 genotype: two 100% stacked bars (compositional homogeneity is itself the conclusion; the segment loop is generic,
+#     so any future group with more than one segment gets automatic colors/external labels)
 ax = fig.add_subplot(gs[1, 1])
 groups = [
     ("P1 type", [(k, v) for k, v in p1.most_common()]),

@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""23_epidemic_clade.py — 流行紧克隆定义（单连锁聚类 + 阈值敏感性）
-输入: results/coresnp/MY9_SNP距离.phylip（替换/位点 × 742,308 = SNP）, results/MY9_分型矩阵.tsv
-方法: 单连锁（union-find）在 SNP 阈值 t 下聚类; 报告最大簇的规模/构成/耐药率/内部中位距离;
-      t = 25/50/75/100 四档敏感性; 对最大簇重算免根成对分子钟（与全 ST3 对照）。
-输出: results/MY9_流行克隆定义.md
+"""23_epidemic_clade.py — Epidemic tight-clone definition (single-linkage clustering + threshold sensitivity)
+Input: the core-SNP pairwise distance matrix under results/coresnp/ (substitutions/sites x 742,308 = SNPs), and the integrated per-genome typing matrix under results/
+Method: single-linkage (union-find) clustering at SNP threshold t; report the largest cluster's size/composition/resistance rate/median within-cluster distance;
+      sensitivity across t = 25/50/75/100; recompute the root-free pairwise molecular clock for the largest cluster (with the full ST3 set as control).
+Output: the epidemic tight-clone definition report (Markdown) under results/
 """
 import csv, os
 import numpy as np
@@ -11,7 +11,7 @@ import numpy as np
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RES = os.path.join(BASE, "results")
 CS = os.path.join(RES, "coresnp")
-CORE_SITES = 742308  # v3 面板 646 株 core(≥95%) 权威值（MY9_15 stage2 实测 2026-09-22; 勿回退）
+CORE_SITES = 742308  # Authoritative core (>=95%) value for the v3 panel of 646 strains (measured in MY9_15 stage2 on 2026-09-22; do not revert)
 
 mat = {r["ena_acc"]: r for r in csv.DictReader(
     open(os.path.join(RES, "MY9_分型矩阵.tsv"), encoding="utf-8-sig"), delimiter="\t")}
@@ -69,7 +69,7 @@ for t in (25, 50, 75, 100):
     result[t] = idx
     print(f"t={t}: n={len(idx)} med={med:.0f} resist={n_res}/{n_res+n_wt}")
 
-# 最大簇（t=50）的免根成对分子钟 vs 全 ST3
+# Root-free pairwise molecular clock for the largest cluster (t=50) vs the full ST3 set
 idx = result[50]
 sub = D[np.ix_(idx, idx)]
 y = yr[idx]
@@ -112,7 +112,7 @@ open(out, "w", encoding="utf-8").write("".join(lines))
 print("written", out)
 print("".join(lines[:14]))
 
-# 紧克隆（25 SNP 最大簇）成员清单 → 供 Fig3 折叠呈现复用（不改算法）
+# Tight-clone (largest 25-SNP cluster) member list -> reused for the folded Fig3 presentation (algorithm unchanged)
 _big = clusters(25)[0]
 with open(os.path.join(os.path.dirname(out), "MY9_紧克隆成员.tsv"), "w", encoding="utf-8-sig", newline="") as _f:
     _f.write("ena_acc" + chr(9) + "MLST_ST" + chr(9) + "resist_23S" + chr(9) + "year" + chr(9) + "country" + chr(10))

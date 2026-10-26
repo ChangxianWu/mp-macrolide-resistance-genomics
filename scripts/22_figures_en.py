@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""22_figures_en.py — 投稿版英文图件（Fig 1–4）
-输入: results/MY9_分型矩阵.tsv（分型+元数据）
-      results/MY9_P1聚类.tsv（P1 谱系）
-      results/MY9_耐药频率_按年份.tsv（频率×年）
-      results/coresnp/MY9_coreSNP_NJ.nwk（core-SNP NJ 树）
-      results/coresnp/treetime/MY9_coreSNP_NJ.nwk（同拓扑副本）
-输出: manuscript/figures/MY9_Fig1..4_*.{png,pdf}（英文标注, 300 dpi PNG）
-数据逻辑与核心分析输出一致。
+"""22_figures_en.py — submission-version English figures (Fig 1–4)
+Inputs: the integrated per-genome typing matrix under results/ (typing + metadata)
+        the P1 lineage assignment table under results/
+        the resistance-frequency-by-year table under results/
+        results/coresnp/MY9_coreSNP_NJ.nwk (core-SNP NJ tree)
+        results/coresnp/treetime/MY9_coreSNP_NJ.nwk (copy with identical topology)
+Outputs: manuscript/figures/MY9_Fig1..4_*.{png,pdf} (English labels, 300 dpi PNG)
+The data logic matches the core analysis outputs.
 """
 import csv, os, collections, math
 
@@ -27,7 +27,7 @@ FIGDIR = os.path.join(BASE, "manuscript", "figures")
 os.makedirs(FIGDIR, exist_ok=True)
 CORE_SITES = 742308
 
-# 国家名规范化（投稿口径: 跟随 Lancet 惯例）
+# Country name normalization (submission convention: follow Lancet style)
 COUNTRY_NORM = {"Taiwan": "Taiwan, China", "China": "Mainland China",
                 "USA": "United States", "not applicable": "Not specified"}
 def cnorm(c):
@@ -182,8 +182,8 @@ allnodes = list(walk_all(root))
 maxd = max(n["depth"] for n in allnodes)
 
 C_RES, C_WT, C_NC = "#c0392b", "#2471a3", "#b2babb"
-# 支序图布局（忽略分支长）: 大枝长离散（ST3 内 ~1e-5 vs ST3↔ST2 ~1e-3）使任何单轴都压缩,
-# 故按等长呈现拓扑, 分支长信息以定量注释框给出。
+# Cladogram layout (branch lengths ignored): the large spread in branch lengths (within ST3 ~1e-5 vs ST3↔ST2 ~1e-3)
+# compresses any single axis, so the topology is drawn with equal lengths and the branch-length information is given in the quantitative annotation box.
 def height(nd):
     if not nd["children"]:
         nd["h"] = 0
@@ -194,7 +194,7 @@ MAXH = height(root)
 def X(nd):
     return MAXH - nd["h"]
 
-# ST3 支系定位（子树内 ST3 占≥85% 且规模≥200 的最大子树）
+# ST3 clade localization (largest subtree with >=85% ST3 and size >=200)
 st3_tips_all = {a for a, m in mat.items() if m.get("MLST_ST") == "3"}
 def collect(nd):
     if not nd["children"]:
@@ -212,7 +212,7 @@ for nd in allnodes:
     if len(tips) >= 200 and k / len(tips) >= 0.85 and len(tips) > best["size"]:
         best = {"size": len(tips), "node": nd, "tips": set(tips)}
 
-# 定量注释: within-ST3（全体/2023 波）与 ST3↔ST2 中位成对 SNP
+# Quantitative annotations: within-ST3 (all / 2023 wave) and ST3↔ST2 median pairwise SNP
 _l = open(os.path.join(CS, "MY9_SNP距离.phylip"), encoding="utf-8").read().strip().splitlines()
 _accs = [ln.split("\t")[0] for ln in _l[1:]]
 _D = np.array([[float(x) for x in ln.split("\t")[1].split()] for ln in _l[1:]])
@@ -233,7 +233,7 @@ ann_lines = [f"Median pairwise SNP distance",
              f"Within ST3 2023 wave: {_med_within(w23):.0f}",
              f"ST3 vs ST2: {_med_between(i3, i2):.0f}"]
 
-# 流行紧克隆: 单连锁 ≤25 SNP 最大簇（与 MY9_23 同口径）
+# Epidemic tight clone: largest single-linkage cluster at <=25 SNP (same convention as MY9_23)
 _p = list(range(len(_accs)))
 def _find(x):
     while _p[x] != x:

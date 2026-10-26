@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-"""10_matrix.py — 分型整合矩阵 + 交叉表（23S 耐药 × P1 型 × MLST ST）
-输入: results/MY9_23S分型.tsv, results/MY9_P1分型.tsv, results/MY9_MLST.tsv, results/MY9_W2_QC.csv
-输出: results/MY9_分型矩阵.tsv（株级全景）
-      results/MY9_交叉_P1×23S耐药.tsv
-      results/MY9_交叉_ST×23S耐药.tsv
+"""10_matrix.py — integrated typing matrix + cross tables (23S resistance × P1 type × MLST ST)
+Input: the per-genome 23S resistance table, the P1 typing table, the MLST table
+      and the W2 QC table under results/
+Output: the integrated per-genome typing matrix under results/ (per-strain panorama)
+      the P1 type x 23S resistance cross table under results/
+      the MLST ST x 23S resistance cross table under results/
 """
 import csv, os, collections
 
@@ -41,7 +42,7 @@ with open(out, "w", encoding="utf-8-sig", newline="") as f:
 print(f"matrix: {len(accs)} genomes -> {out}")
 
 def cross_table(key_field, fname, order=None):
-    """行=key_field 值, 列=耐药状态; 含 2063G 计数"""
+    """Rows = key_field values, columns = resistance status; also includes the 2063G count"""
     tab = collections.defaultdict(collections.Counter)
     for a in accs:
         t, src = t23[a], (p1 if key_field == "P1_type" else mlst)[a]

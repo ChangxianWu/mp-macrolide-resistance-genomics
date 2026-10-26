@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
-"""07_w2qc.py — 组装完整性 QC + 去冗余（Mash 替代，纯标准库 MinHash）+ 异常检出
-输入: ../data/fasta/*.fna + ../MY9_下载清单.csv + ../MY9_入组池_基因组元数据.csv
-输出: ../results/MY9_W2_QC.csv（株级 QC 表）+ 控制台摘要
+"""07_w2qc.py — assembly completeness QC + redundancy removal (Mash replacement, pure standard-library MinHash) + anomaly detection
+Input: ../data/fasta/*.fna + the download manifest CSV + the inclusion-pool genome metadata CSV
+Output: ../results/MY9_W2_QC.csv (per-strain QC table) + console summary
 
-方法:
-  1) 完整性: 每株 n_contigs / total_len / N50 / GC
-  2) 去冗余: canonical 16-mer 滑窗取样（stride 50, ~16k seeds/株）全对 Jaccard；
-     ≥0.97 判为疑似同一分离株重复提交（不同 BioSample 的同株双提交），保留入组池优先级更高者
-  3) 异常: 总长偏离 MP 典型 0.72–0.95 Mb（双基因组混合组装 ~1.6 Mb 已在 04 分型中以 dup2ok 处理）
-  4) excluded 复核: W1 esummary 未落盘 exclfromrefseq 字段，本表以 status + 长度异常代偿，如实记录
+Method:
+  1) Completeness: n_contigs / total_len / N50 / GC per strain
+  2) Redundancy removal: canonical 16-mer sliding-window sampling (stride 50, ~16k seeds/strain) all-pairs Jaccard;
+     >=0.97 is treated as a suspected duplicate submission of the same isolate (the same strain submitted twice under different BioSamples); keep the one with higher inclusion-pool priority
+  3) Anomaly: total length deviates from the typical MP range 0.72–0.95 Mb (dual-genome mixed assemblies ~1.6 Mb were already handled in step 04 typing via dup2ok)
+  4) excluded recheck: the W1 esummary exclfromrefseq field was not persisted, so this table compensates with status + length anomaly and records it as-is
 
-注: 本 QC 用于系统发生前样本洁化（W4–6 core-SNP 输入），不改动 23S/P1/MLST 分型结果。
+Note: this QC is used for sample cleanup before phylogenetics (W4–6 core-SNP input); it does not alter the 23S/P1/MLST typing results.
 """
 import csv, glob, itertools, os, sys, time
 
@@ -94,7 +94,7 @@ def main():
         if idx % 50 == 0:
             print(f"sketched {idx}/{len(files)} ({time.time()-t0:.0f}s)", flush=True)
 
-    # --- 全对 Jaccard ---
+    # --- all-pairs Jaccard ---
     print("pairwise Jaccard...", flush=True)
     t0 = time.time()
     accs = [q["ena_acc"] for q in qc]
@@ -118,7 +118,7 @@ def main():
         q["dup_with"] = ";".join(sorted(dupmap.get(q["ena_acc"], [])))
         q["dup_flag"] = 1 if q["dup_with"] else 0
 
-    # 写出（保持入组池顺序）
+    # write out (preserving inclusion-pool order)
     out = os.path.join(BASE, "results", "MY9_W2_QC.csv")
     with open(out, "w", encoding="utf-8-sig", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(qc[0].keys()))

@@ -1,24 +1,25 @@
 # -*- coding: utf-8 -*-
-"""29_fig3_redesign.py — Figure 3 重设计 v2（真实枝长系统发生 + 耐药变化事件标注）
+"""29_fig3_redesign.py — Figure 3 redesign v2 (phylogeny with true branch lengths + annotation of resistance-change events)
 
-旧版三个硬错误（本轮修复）:
-  ① 面板 A xlim 写死 (-0.2, 10.5) 而 NJ 树深 56 层 → ST2/ST14/ST17 楔形全部画在画布外,
-     与图注承诺的"折叠楔形"不符;
-  ② 绿色楔形按"最小包含 ≥90% 克隆成员的子树"标注为 "Epidemic clone n = 626, 456/626 resistant"
-     —— 626 是该子树 tip 数而非克隆规模（352）, 与正文/Table 4 直接矛盾;
-  ③ 面板 B 标题与子图标题同 y 重叠, 总标题写死 "528 genomes"。
+Three hard errors in the old version (fixed in this round):
+  1. Panel A had a hard-coded xlim of (-0.2, 10.5) while the NJ tree is 56 levels deep -> the ST2/ST14/ST17 wedges were all drawn outside the canvas,
+     contradicting the "collapsed wedges" promised in the figure legend;
+  2. The green wedge, defined as the "smallest subtree containing >=90% of clone members", was labelled "Epidemic clone n = 626, 456/626 resistant"
+     — 626 is the tip count of that subtree, not the clone size (352), which directly contradicts the main text/Table 4;
+  3. The panel B title overlapped the subplot title at the same y, and the overall title hard-coded "528 genomes".
 
-新版设计（对应当前叙事"根自由最小状态变化 + 面板特异性相似组"; 刻度组只表示 25-SNP
-  single-linkage 成员, 不表示单系或传播链）:
-  面板 A  全树 phylogram（x = SNP 距离, 真实枝长 ×742,308）: tip 按 23S 基因型着色;
-          25-SNP 相似组 352 株在右缘以绿色刻度精确标出（不并成整块, 因该组在 NJ 拓扑上非严格单系）;
-          A2063 变化边以符号标出（▲ 变为 G / ▽ 变回 A; 方向为展示拓扑下的最优重建, 非唯一历史）; ST 主要支系标注; SNP 标尺。
-  面板 B  ST3 子树 phylogram（396 tips）: 6 次变化逐边标出; 主导耐药支系（≥95% G）涂色。
-克隆组成仪表板已下沉为 Supplementary Figure S2（MY9_31_figS2_composition.py）。
+New design (matching the current narrative "root-free minimum state changes + panel-specific similarity group"; the tick group denotes
+  only 25-SNP single-linkage membership, not monophyly or transmission chains):
+  Panel A  full-tree phylogram (x = SNP distance, true branch length x742,308): tips colored by 23S genotype;
+          the 352 strains of the 25-SNP similarity group are marked precisely with green ticks at the right edge (not merged into a single block, because this group is not strictly monophyletic on the NJ topology);
+          A2063 change edges are marked with symbols (^ change to G / v change back to A; directions are the optimal reconstruction under the displayed topology, not a unique history); major ST clades annotated; SNP scale bar.
+  Panel B  ST3 subtree phylogram (396 tips): 6 changes marked edge by edge; the dominant resistance lineage (>=95% G) is shaded.
+The clone-composition dashboard has been moved down to Supplementary Figure S2 (MY9_31_figS2_composition.py).
 
-单源纪律: tip 基因型/克隆成员读 results/MY9_分型矩阵.tsv 与 results/coresnp/MY9_紧克隆成员.tsv;
-         变化次数与 Table 6 断言一致（34/22 全树, 6 子树）——不一致直接报错, 不静默出图。
-输出: manuscript/figures/MY9_Fig3_coreSNP_tree.png / .pdf
+Single-source discipline: tip genotypes/clone membership are read from the integrated per-genome typing matrix under
+         results/ and the tight-clone membership table under results/coresnp/;
+         change counts are asserted against Table 6 (34/22 whole tree, 6 subtree) — any mismatch raises an error rather than silently producing the figure.
+Output: manuscript/figures/MY9_Fig3_coreSNP_tree.png / .pdf
 """
 import csv
 from collections import Counter
@@ -40,7 +41,7 @@ CORE_SITES = 742308
 C_RES, C_WT, C_OTH = "#c0392b", "#2471a3", "#e67e22"
 C_CLONE, C_DOM = "#117a65", "#f4d03f"
 
-# ---------- 单源数据 ----------
+# ---------- Single-source data ----------
 mat = {r["ena_acc"]: r for r in csv.DictReader(
     open(RES / "MY9_分型矩阵.tsv", encoding="utf-8-sig"), delimiter="\t")}
 clone = {r["ena_acc"] for r in csv.DictReader(
@@ -62,7 +63,7 @@ def color_of(a):
     return {"wt": C_WT, "g": C_RES, "other": C_OTH}[geno(a)]
 
 
-# ---------- Fitch（与 MY9_26 / MY9_20 同算法; 用于定位变化边, 计数与 Table 6 断言） ----------
+# ---------- Fitch (same algorithm as MY9_26 / MY9_20; used to locate change edges; counts asserted against Table 6) ----------
 def fitch_edges(tree, states):
     sets, changes = {}, 0
     for nd in tree.find_clades(order="postorder"):
@@ -101,7 +102,7 @@ def fitch_edges(tree, states):
     return changes, edges
 
 
-# ---------- 布局: phylogram（x = 累积 SNP, y = tip 序） ----------
+# ---------- Layout: phylogram (x = cumulative SNP, y = tip order) ----------
 def layout(tree):
     xs, ys = {}, {}
     xs[id(tree.root)] = 0.0
@@ -134,7 +135,7 @@ def draw_phylogram(ax, tree, xs, ys, tip_colors, lw=0.35):
 
 
 def largest_pure_clade(tree, states, allele, frac=0.80, min_tips=5):
-    """最大"纯度达标"支系 → 返回 (node, n_tips, purity)。用于 ST 支系标注（含纯度, 避免暗示单系）。"""
+    """Largest "purity-passing" clade -> returns (node, n_tips, purity). Used for ST clade annotation (purity included to avoid implying monophyly)."""
     best = None
     for nd in tree.find_clades(order="postorder"):
         tips = [t.name for t in nd.get_terminals()]
@@ -149,7 +150,7 @@ def largest_pure_clade(tree, states, allele, frac=0.80, min_tips=5):
 
 
 # =========================================================
-# 面板 A: 全树
+# Panel A: full tree
 # =========================================================
 full = Phylo.read(CS / "MY9_coreSNP_NJ.nwk", "newick")
 for t in full.get_terminals():
@@ -182,7 +183,7 @@ for sp in ("top", "right", "left"):
 axA.set_xlabel("core-genome SNP distance", fontsize=10)
 axA.tick_params(labelsize=9)
 
-# 克隆成员: 右缘绿色刻度（连续者自然成条; 不并成整块, 因克隆在 NJ 拓扑上非严格单系）
+# Clone members: green ticks at the right edge (consecutive members naturally form a bar; not merged into one block, because the clone is not strictly monophyletic on the NJ topology)
 xbar = xmaxA * 1.045
 clone_tips = [t for t in tipsA if t.name in clone]
 for t in clone_tips:
@@ -194,7 +195,7 @@ axA.text(xbar + xmaxA * 0.030, (min(yc) + max(yc)) / 2,
          f"{sum(1 for t in clone_tips if geno(t.name) == 'g')}/{len(clone_tips)} A2063G",
          fontsize=8.5, color="#0b5345", fontweight="bold", va="center", ha="left")
 
-# A2063 变化边: ▲ 获得 G, ▽ 回复（方向相对当前显示根; 最小变化次数本身与定根无关）
+# A2063 change edges: ^ gain of G, v reversion (direction relative to the currently displayed root; the minimum change count itself is rooting-independent)
 for par, ch, a, b in edges_full:
     x, y = xsA[id(ch)] * CORE_SITES, ysA[id(ch)]
     if b == "G":
@@ -202,7 +203,7 @@ for par, ch, a, b in edges_full:
     elif a == "G":
         axA.plot(x, y, marker="v", ms=3.4, color="#7f8c8d", mec="white", mew=0.4, zorder=5)
 
-# 主要 ST 支系标注（带纯度; ST 非严格单系, 故不写成"ST3 clade"）
+# Major ST clade annotation (with purity; STs are not strictly monophyletic, hence not written as "ST3 clade")
 st_states = {t.name: (mat.get(t.name, {}).get("MLST_ST") or "?") for t in tipsA}
 for lab in ("3", "14", "17", "2"):
     hit = largest_pure_clade(full, st_states, lab)
@@ -213,7 +214,7 @@ for lab in ("3", "14", "17", "2"):
                  fontsize=7.4, color="#444", style="italic", ha="left", va="bottom", zorder=7,
                  bbox=dict(facecolor="white", alpha=0.78, edgecolor="none", pad=1.0))
 
-# SNP 标尺
+# SNP scale bar
 sbx, sby = xmaxA * 0.60, -6
 axA.plot([sbx, sbx + 100], [sby, sby], color="#333", lw=1.6)
 axA.text(sbx + 50, sby + 3, "100 SNP", fontsize=8.5, ha="center", va="bottom")
@@ -233,7 +234,7 @@ axA.legend(handles=legA, loc="upper left", fontsize=8.8, frameon=False, ncol=2,
            bbox_to_anchor=(0.0, -0.075), handletextpad=0.5, columnspacing=1.4)
 
 # =========================================================
-# 面板 B: ST3 子树
+# Panel B: ST3 subtree
 # =========================================================
 sub = Phylo.read(CS / "treetime" / "ST3_subtree.nwk", "newick")
 for t in sub.get_terminals():
@@ -250,8 +251,9 @@ n_tipsB = len(tipsB)
 axB = fig.add_subplot(gsA[0, 1])
 draw_phylogram(axB, sub, xsB, ysB, colorsB)
 
-# 克隆成员: 与面板 A 同一编码（右缘绿色刻度）——单连锁聚类可串联, 成员在树上不集中于单一支系,
-# 故不做"主导支系"着色（会误导为单系）, 改用逐株刻度 + 计数标注
+# Clone members: same encoding as panel A (green ticks at the right edge) — single-linkage clustering can chain members together,
+# so they are not concentrated in a single clade on the tree; hence no "dominant clade" shading (which would misleadingly imply monophyly),
+# and individual tick marks + a count annotation are used instead
 xmaxB = max(xsB[id(t)] for t in tipsB) * CORE_SITES
 xbarB = xmaxB * 1.045
 clone_tipsB = [t for t in tipsB if t.name in clone]

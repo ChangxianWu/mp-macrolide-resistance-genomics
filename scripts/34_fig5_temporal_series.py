@@ -1,14 +1,15 @@
 # -*- coding: utf-8 -*-
-"""34_fig5_temporal_series.py — Figure 5: 日本时间序列 + 25-SNP 组逐年构成
+"""34_fig5_temporal_series.py — Figure 5: Japanese time series + year-by-year composition of the 25-SNP group
 
-由来: 评审第六部分要求可视化"最深处的时间序列"与"采样扩展对祖先态重建的影响"。
-      MY9_33 已量化: 352 株组在组内 10/15/20 SNP 阈值下仍为单一连通分量（无 ≥5 株亚簇分裂）;
-      剪去 114 株日本回填批后最小变化数 34→24（全树）、6→3（ST3 子树）。
-设计: (A) 日本组装体按采样年份堆叠柱（野生型/耐药相关）, 标注 1976-1994 全野生型窗口
-      与 2000 年首批耐药相关基因型; (B) 25-SNP 组按年份堆叠柱（地区构成）,
-      标注三个采样波次与组内再聚类不分裂。
-单源: results/MY9_分型矩阵.tsv（基因型/年份/国家）+ results/coresnp/MY9_紧克隆成员.tsv（组员）。
-输出: manuscript/figures/MY9_Fig5_temporal_series.png / .pdf
+Rationale: part 6 of the review asked for a visualization of "the deepest temporal series" and "the effect of sampling expansion on ancestral-state reconstruction".
+      MY9_33 already quantified both: the 352-genome group remains a single connected component at within-group 10/15/20 SNP thresholds (no sub-cluster of >=5 genomes splits off);
+      after pruning the 114 Japanese backfill genomes, the minimum number of changes drops from 34 to 24 (whole tree) and from 6 to 3 (ST3 subtree).
+Design: (A) Japanese assemblies as stacked bars by collection year (wild type / resistance-associated), annotating the 1976-1994 all-wild-type window
+      and the first resistance-associated genotypes in 2000; (B) the 25-SNP group as stacked bars by year (regional composition),
+      annotating the three sampling waves and the absence of any split on within-group re-clustering.
+Single source: the integrated per-genome typing matrix under results/ (genotype/year/country) + the tight-clone
+      membership table under results/coresnp/ (group members).
+Output: manuscript/figures/MY9_Fig5_temporal_series.png / .pdf
 """
 import csv
 from collections import Counter
@@ -55,7 +56,7 @@ fig = plt.figure(figsize=(11.5, 5.1))
 gs = fig.add_gridspec(1, 2, hspace=0.32, wspace=0.22,
                       left=0.055, right=0.985, top=0.82, bottom=0.27)
 
-# ---- (A) 日本时间序列 ----
+# ---- (A) Japanese time series ----
 ax = fig.add_subplot(gs[0, 0])
 years = list(range(1976, 2025))
 wt_v = [jp_wt.get(y, 0) for y in years]
@@ -82,7 +83,7 @@ ax.set_title(f"(A) Japanese assemblies by collection year (n={len(jp)})",
              fontsize=11.5, loc="left")
 ax.legend(fontsize=9, loc="upper left", frameon=False)
 
-# ---- (B) 25-SNP 组逐年-地区 ----
+# ---- (B) 25-SNP group by year and region ----
 ax = fig.add_subplot(gs[0, 1])
 cyears = sorted(set(c_years))
 regions = Counter(cnorm(r["country"]) for r in clone)

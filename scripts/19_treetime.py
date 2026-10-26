@@ -1,17 +1,17 @@
 # -*- coding: utf-8 -*-
-"""19_treetime.py — TreeTime 正式定年（ST3 克隆子树）
-输入: results/coresnp/treetime/{ST3_subtree.nwk, ST3.aln.fasta, ST3_dates.csv}
-      results/MY9_分型矩阵.tsv（国家/年份, 用于分组 MRCA）
-网格: 定根方式 × 共祖先先验（固定 Tc; coalescent='opt' 在本机实测卡死, 弃用）
-输出: results/coresnp/treetime/tt_summary.tsv + tt_run.log
-      results/coresnp/treetime/timetree_<setting>.nexus（时间树）
-      results/coresnp/MY9_TreeTime定年报告.md（由 MY9_19b 汇总生成）
+"""19_treetime.py — TreeTime formal dating (ST3 clonal subtree)
+Inputs: results/coresnp/treetime/{ST3_subtree.nwk, ST3.aln.fasta, ST3_dates.csv}
+        the integrated per-genome typing matrix under results/ (country/year, used for grouped MRCAs)
+Grid: rooting method × coalescent prior (fixed Tc; coalescent='opt' hangs in practice on this machine, so it is not used)
+Outputs: results/coresnp/treetime/tt_summary.tsv + tt_run.log
+         results/coresnp/treetime/timetree_<setting>.nexus (time tree)
+         the TreeTime dating report (Markdown) under results/coresnp/ (assembled by MY9_19b)
 
-口径:
-- clock_rate 单位 subs/site/year; × core 位点数 742,308 = SNP/genome/year（每谱系）
-- R² = TreeTime date2dist.r_val（= Treg.explained_variance, 根-末梢回归解释方差）
-- 90% 后验区间仅对关键节点调用 get_max_posterior_region（全节点扫描代价过高）
-本机 venv: MY9/.venv-align (treetime 0.11.4)
+Conventions:
+- clock_rate is in subs/site/year; × 742,308 core sites = SNP/genome/year (per lineage)
+- R² = TreeTime date2dist.r_val (= Treg.explained_variance, explained variance of the root-to-tip regression)
+- The 90% posterior interval is only computed for key nodes via get_max_posterior_region (scanning all nodes is too expensive)
+Local venv: MY9/.venv-align (treetime 0.11.4)
 """
 import csv, os, sys, time
 from treetime import TreeTime
@@ -20,7 +20,7 @@ from Bio import Phylo
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RESDIR = os.path.join(BASE, "results")
 TTDIR = os.path.join(RESDIR, "coresnp", "treetime")
-CORE_SITES = 742308  # v2 面板 654 株 core 权威值
+CORE_SITES = 742308  # authoritative core value for the v2 panel's 654 strains
 LOG = open(os.path.join(TTDIR, "tt_run.log"), "w", encoding="utf-8")
 
 def log(msg):

@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
-"""15b_clock.py — SNP 级分子钟检验（子树内定根）+ 分层 ρ 诊断
-输入: results/coresnp/MY9_SNP距离.phylip（MY9_15 产物, 替换/位点）+ MY9_mash距离.phylip + 分型矩阵
-输出: results/coresnp/MY9_分子钟检验.md + 控制台
+"""15b_clock.py — SNP-level molecular clock test (rooting within subtrees) + stratified ρ diagnostics
+Input: the SNP distance matrix under results/coresnp/ (MY9_15 products, substitutions/site)
+      + the Mash distance matrix under results/ + the integrated typing matrix
+Output: the molecular-clock test report markdown under results/coresnp/ + console
 
-方法: 对每个目标群（ST3/ST14/div-A）取其 SNP 距离子矩阵 → NJ → 子树中点定根 →
-      root-to-tip 对收集年份回归（正斜率+高 R² = 群体内分子钟成立）。
-      Mash 互验按距离分层（Mash sketch 在 ~1e-4 量级有噪声底, 全域 ρ 被紧簇打乱属预期）。
+Methods: for each target group (ST3/ST14/div-A) take its SNP distance submatrix → NJ → midpoint-root
+      the subtree → regress root-to-tip against collection year (positive slope + high R² = a
+      molecular clock holds within the population).
+      The Mash cross-check is stratified by distance (Mash sketches have a noise floor around the
+      ~1e-4 scale, so a global ρ being distorted by tight clusters is expected).
 """
 import csv, os, time, collections
 import numpy as np
@@ -23,7 +26,7 @@ idx = {a: i for i, a in enumerate(accs)}
 mat = {r["ena_acc"]: r for r in csv.DictReader(open(os.path.join(RESDIR, "MY9_分型矩阵.tsv"), encoding="utf-8-sig"), delimiter="\t")}
 
 def nj(sub):
-    """sub: 索引列表 → (br dict, root_id, node_name)"""
+    """sub: list of indices → (br dict, root_id, node_name)"""
     m0 = len(sub)
     active = list(range(m0))
     name = {i: accs[sub[i]] for i in range(m0)}
@@ -93,7 +96,7 @@ def clock(group_name, pred, min_n=15):
     if len(sub) < min_n:
         return f"- {group_name}: n={len(sub)} < {min_n}, 跳过"
     br, root, name = nj(sub)
-    # 中点定根: 找直径两端
+    # Midpoint rooting: find the two ends of the diameter
     adj = collections.defaultdict(list)
     for nd, ch in br.items():
         for c, L in ch:
@@ -122,7 +125,7 @@ def clock(group_name, pred, min_n=15):
     syy = sum((y - my) ** 2 for _, y in pts)
     slope = sxy / sxx
     r2 = (sxy * sxy) / (sxx * syy)
-    # 换算 SNP/年: 乘 core 长度（距离单位=替换/位点）
+    # Convert to SNP/year: multiply by the core length (distance units = substitutions/site)
     core_len = 742308
     return f"- {group_name}: n={len(pts)}, slope={slope*core_len:.1f} SNP/年, R²={r2:.3f}"
 
@@ -140,7 +143,7 @@ out.append(clock("ST14", lambda m: m.get("MLST_ST") == "14"))
 out.append(clock("div-A（台湾分歧 P1 谱系）", lambda m: str(m.get("P1_cluster", "")).startswith("div-A")))
 out.append(clock("ST2（美国野生型对照）", lambda m: m.get("MLST_ST") == "2"))
 
-# --- 分层 ρ ---
+# --- Stratified ρ ---
 lines = open(os.path.join(RESDIR, "MY9_mash距离.phylip"), encoding="utf-8").read().strip().splitlines()
 mnames = [ln.split("\t")[0] for ln in lines[1:]]
 MD = [[float(x) for x in ln.split("\t")[1].split()] for ln in lines[1:]]

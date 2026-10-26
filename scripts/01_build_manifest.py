@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
-"""01_build_manifest.py — 构建 FASTA 下载清单
-输入: ../assembly_raw.tsv + ../MY9_入组池_基因组元数据.csv
-输出: ../MY9_下载清单.csv (assembly_accession, biosample, trio_ok, url, filename)
-依赖: 纯标准库; NCBI esummary 补抓 assembly_name（构建 FTP 路径必需）
+"""01_build_manifest.py — Build the FASTA download manifest
+Input:  ../assembly_raw.tsv + the genome metadata CSV for the inclusion pool
+Output: the download manifest CSV under the repository root
+        (assembly_accession, biosample, trio_ok, url, filename)
+Deps:   standard library only; NCBI esummary is queried to fill in assembly_name
+        (required to construct the FTP path)
 """
 import csv, json, sys, time, urllib.request, urllib.error, os
 

@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
-"""11_p1_cluster.py — P1 分歧谱系自聚类定名
-输入: ../data/fasta/*.fna + reference/U00089.2.embl.cache.txt（M129 SQ）
-      + reference/CP010546.embl.cache.txt（FH SQ）+ reference/p1_panel_ncbi.fasta（PHOL panel）
-输出: ../results/MY9_P1聚类.tsv + results/MY9_P1聚类摘要.md
+"""11_p1_cluster.py — self-clustering and naming of P1 divergent lineages
+Input: ../data/fasta/*.fna + reference/U00089.2.embl.cache.txt (M129 SQ)
+      + reference/CP010546.embl.cache.txt (FH SQ) + reference/p1_panel_ncbi.fasta (PHOL panel)
+Output: the per-genome P1 cluster assignment table + the cluster summary markdown under ../results/
 
-方法:
-  1) 提取: M129 P1 采样 20-mer（每 25 nt, ~195 个）在每株定位命中位置;
-     命中 ≥10 → 窗口 = [min(pos)-500, max(pos)+20+500]（P1 邻域, 无需精确边界; 20-mer 对拼接顺序不敏感）
-  2) 聚类: 提取窗口 20-mer 全对 Jaccard, 单连锁; 阈值取直方图谷区（脚本打印, 默认 0.5）
-  3) 定名: 含 M129-P1 的簇 = type1; 含 FH-P1 = type2; 含 PHOL 成员 = phol; 其余 = div-A/B/…
-  4) 簇级统计: n / 国家 / 年份段 / ST / 23S 耐药率（join MY9_分型矩阵.tsv）
+Method:
+  1) Extraction: locate where 20-mers sampled from M129 P1 (every 25 nt, ~195 in total) hit each strain;
+     hits >=10 → window = [min(pos)-500, max(pos)+20+500] (P1 neighbourhood, no exact boundaries needed; 20-mers are insensitive to assembly order)
+  2) Clustering: all-pairs Jaccard over the window 20-mers, single linkage; threshold taken from a histogram valley (printed by the script, default 0.5)
+  3) Naming: clusters containing M129-P1 = type1; containing FH-P1 = type2; containing a PHOL member = phol; the rest = div-A/B/…
+  4) Cluster-level statistics: n / country / year range / ST / 23S resistance rate (joined with the integrated typing matrix under results/)
 """
 import csv, glob, itertools, json, os, re, collections
 
@@ -30,7 +30,7 @@ def fseq(path):
 
 _RC = str.maketrans("ACGTNacgtn", "TGCANtgcan")
 def kmers(seq, k=K):
-    """canonical k-mer 集（链不变）"""
+    """canonical k-mer set (strand-invariant)"""
     out = set()
     for i in range(len(seq) - k + 1):
         x = seq[i:i+k]
@@ -38,7 +38,7 @@ def kmers(seq, k=K):
             out.add(min(x, x.translate(_RC)[::-1]))
     return out
 
-# --- 参考 P1 ---
+# --- reference P1 ---
 embl129 = open(os.path.join(REFDIR, "U00089.2.embl.cache.txt"), encoding="utf-8").read()
 g129 = embl_sq_seq(embl129)
 p1_m129 = g129[180857:185741]
@@ -47,7 +47,7 @@ samps = [s for s in samps if "N" not in s]
 print(f"anchor samples from M129 P1: {len(samps)}", flush=True)
 
 embl_fh = open(os.path.join(REFDIR, "CP010546.embl.cache.txt"), encoding="utf-8").read()
-fh = embl_sq_seq(embl_fh)   # EMBL SQ 块解析（fseq 会把注释文本当序列——勿用）
+fh = embl_sq_seq(embl_fh)   # parse the EMBL SQ block (fseq would treat annotation text as sequence — do not use it)
 p1_fh = fh[179323:184228]
 assert p1_fh.startswith("ATG"), "FH P1 切片异常"
 
@@ -63,7 +63,7 @@ if os.path.exists(os.path.join(REFDIR, "p1_panel_ncbi.fasta")):
     panel = {k: "".join(v).upper() for k, v in panel.items()}
 print(f"PHOL panel members: {len(panel)}", flush=True)
 
-# --- 提取 ---
+# --- extraction ---
 meta = {}
 pool = {}
 with open(os.path.join(BASE, "MY9_入组池_基因组元数据.csv"), encoding="utf-8-sig") as f:
@@ -83,9 +83,9 @@ for k, path in enumerate(files, 1):
     g = fseq(path)
     gr = g.translate(_RC)[::-1]
     if sum(1 for s in samps if s in gr) > sum(1 for s in samps if s in g):
-        g = gr                            # 反向 contig 基因组: 用 rc 链提取
+        g = gr                            # reverse-strand contig genome: extract using the rc strand
     hits = sorted(p for p in (g.find(s) for s in samps) if p >= 0)
-    # 命中链: 相邻间距 ≤2000 nt 的最大链（field 株可有额外 RepMP 拷贝造成远端散点命中）
+    # hit chain: the largest chain with adjacent spacing <=2000 nt (field strains may have extra RepMP copies causing distant scattered hits)
     best_chain = []
     if hits:
         chain = [hits[0]]
@@ -100,7 +100,7 @@ for k, path in enumerate(files, 1):
             best_chain = chain
     if len(best_chain) >= MIN_HITS:
         s0, e0 = best_chain[0], best_chain[-1] + K
-        win = g[max(0, s0 - 100): e0 + 100]   # 小 pad: 保留 P1 本体, 侧翼保守序列会抬高跨簇 Jaccard 底噪
+        win = g[max(0, s0 - 100): e0 + 100]   # small pad: keep the P1 body itself; flanking conserved sequence would raise the cross-cluster Jaccard background noise
         if 2500 <= len(win) <= 8000:
             windows[acc] = (win, len(best_chain))
         else:
@@ -111,7 +111,7 @@ for k, path in enumerate(files, 1):
         print(f"extracted {k}/{len(files)}", flush=True)
 print(f"extracted: {len(windows)}, fails: {len(fails)}", flush=True)
 
-# --- 聚类（含参考成员）---
+# --- clustering (including reference members) ---
 members = dict(windows)
 members["REF_M129_P1"] = (p1_m129, len(samps))
 members["REF_FH_P1"] = (p1_fh, sum(1 for s in samps if s in fh))
@@ -121,11 +121,11 @@ keys = list(members)
 sk = {a: kmers(members[a][0]) for a in keys}
 print(f"clustering {len(keys)} members...", flush=True)
 
-# --- 两段式分类: 先最近参考（Jaccard + 边距）, 再对分歧株自聚类 ---
+# --- two-stage classification: nearest reference first (Jaccard + margin), then self-cluster the divergent strains ---
 j_m129 = {a: (len(sk[a] & sk["REF_M129_P1"]) / len(sk[a] | sk["REF_M129_P1"])) for a in keys}
 j_fh = {a: (len(sk[a] & sk["REF_FH_P1"]) / len(sk[a] | sk["REF_FH_P1"])) for a in keys}
-J_REF_MIN = 0.35   # 低于此 = 与两参考均不像（分歧谱系）
-MARGIN = 0.2       # 胜方需领先比例
+J_REF_MIN = 0.35   # below this = unlike either reference (divergent lineage)
+MARGIN = 0.2       # required lead ratio for the winner
 
 assign = {}
 div_pool = []
@@ -141,7 +141,7 @@ for a in keys:
     else:
         assign[a] = "type-mixed(recombinant?)"
 
-# 分歧株自聚类（单连锁）
+# self-clustering of divergent strains (single linkage)
 parent = {a: a for a in div_pool}
 def find(x):
     while parent[x] != x:
@@ -160,7 +160,7 @@ groups = collections.defaultdict(list)
 for a in div_pool:
     groups[find(a)].append(a)
 
-# 簇级注释: 每簇对各参考成员的 mean Jaccard（亚型归属证据, 2j/2f/2g 等来自文献标签序列）
+# cluster-level annotation: mean Jaccard of each cluster against each reference member (evidence for subtype assignment; 2j/2f/2g etc. come from literature-labelled sequences)
 ref_keys = [k for k in keys if k.startswith("REF_")]
 def mean_j(members, ref):
     vals = []
@@ -183,16 +183,16 @@ for root, mem in sorted(groups.items(), key=lambda kv: -len(kv[1])):
     cluster_notes[lab] = scores[:3]
     for m in mem:
         assign[m] = lab
-# type1/type2 簇也注释
+# annotate type1/type2 clusters as well
 for kk, lab in list(assign.items()):
-    pass  # type1/type2 标签保持不变（参考定义明确）
+    pass  # type1/type2 labels are kept unchanged (the reference definition is unambiguous)
 
 cluster_of = assign
 print(f"assigned: type1/2={sum(1 for v in assign.values() if v.startswith('type1') or v.startswith('type2'))}, "
       f"mixed={sum(1 for v in assign.values() if v.startswith('type-mixed'))}, "
       f"divergent={len(div_pool)} ({len(groups)} clusters)", flush=True)
 
-# --- 输出 ---
+# --- output ---
 mat = {}
 with open(os.path.join(RESDIR, "MY9_分型矩阵.tsv"), encoding="utf-8-sig") as f:
     for r in csv.DictReader(f, delimiter="\t"):
@@ -210,7 +210,7 @@ with open(out, "w", encoding="utf-8-sig", newline="") as f:
                     m.get("MLST_ST", ""), m.get("resist_23S", "")])
 print(f"written {out}")
 
-# --- 簇级摘要 ---
+# --- cluster-level summary ---
 cl = collections.defaultdict(lambda: {"n": 0, "ctry": collections.Counter(), "yr": [],
                                       "st": collections.Counter(), "res": collections.Counter()})
 for acc, lab in cluster_of.items():

@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
-"""20_resistance_origin.py — 耐药突变祖先状态重建（A2063G 起源与年代）
-输入: results/coresnp/treetime/{ST3_subtree.nwk, ST3.aln.fasta, ST3_dates.csv}
-     results/coresnp/alleles/*.npy（core 列掩码重建, 与 MY9_18 同口径）
-方法:
-  1) **根无关 Fitch 简约法**（主证据）: 在 NJ 拓扑上统计 A/G 最小变化次数,
-     定位变化边与下游末梢 → "单次起源 vs 多次独立突变" 判定不依赖定根与时钟;
-  2) TreeTime ML 联合祖先重建（固定 Tc, 不用 coalescent='opt'——实测卡死）:
-     给出增益节点的粗略年代（附定年不稳健的告警）。
-位点（M129 基因组 0-based, 经 MY9_04 call_site 几何 + 表型判别列双重核实）:
+"""20_resistance_origin.py — ancestral state reconstruction of resistance mutations (A2063G origin and timing)
+Inputs: results/coresnp/treetime/{ST3_subtree.nwk, ST3.aln.fasta, ST3_dates.csv}
+        results/coresnp/alleles/*.npy (rebuild of the core column mask, same convention as MY9_18)
+Methods:
+  1) **Root-independent Fitch parsimony** (primary evidence): count the minimum number of A/G changes
+     on the NJ topology and locate the change edges and the downstream tips -> the "single origin vs
+     multiple independent mutations" call does not depend on rooting or on the clock;
+  2) TreeTime ML joint ancestral reconstruction (fixed Tc; coalescent='opt' is not used — it hangs in practice):
+     gives rough dates for the gain nodes (with a caveat that the dating is not robust).
+Sites (M129 genome, 0-based, double-checked via MY9_04 call_site geometry + the phenotype-discriminating column):
      2063 = 122118 | 2064 = 122119 | 2617 = 122672
-输出: results/coresnp/MY9_耐药起源.md
+Output: the resistance-origin report (Markdown) under results/coresnp/
 """
 import csv, glob, os
 import numpy as np
@@ -24,7 +25,7 @@ SITES = {"A2063": 122118, "A2064": 122119, "C2617": 122672}
 WT = {"A2063": "A", "A2064": "A", "C2617": "C"}
 MUT = {"A2063": "G", "A2064": "G", "C2617": "G"}
 
-# --- core 列掩码（与 MY9_18 完全同口径）---
+# --- core column mask (exactly the same convention as MY9_18) ---
 accs_all = [os.path.basename(p)[:-4] for p in sorted(glob.glob(os.path.join(CS, "alleles", "*.npy")))]
 M = np.stack([np.load(os.path.join(CS, "alleles", a + ".npy")) for a in accs_all])
 n = M.shape[0]
@@ -37,7 +38,7 @@ for name, g0 in SITES.items():
     col_of[name] = int(w[0]) if len(w) else -1
     print(f"{name} genome0={g0} -> alignment col {col_of[name]}", flush=True)
 
-# --- 末端状态: 直接从 ST3 比对取列（不依赖 TreeTime）---
+# --- tip states: read the column directly from the ST3 alignment (no TreeTime dependency) ---
 seqs = {}
 name = None
 cur = []
@@ -79,7 +80,7 @@ for name in ("A2063", "A2064", "C2617"):
     n_wt = sum(1 for v in st.values() if v == W)
     n_mut = sum(1 for v in st.values() if v == Mu)
     n_unk = len(st) - n_wt - n_mut
-    # ---- Fitch 简约法（迭代后序 + 前序赋值）----
+    # ---- Fitch parsimony (iterative post-order + pre-order assignment) ----
     post = list(tree.find_clades(order="postorder"))
     sets = {}
     changes = 0
@@ -96,7 +97,7 @@ for name in ("A2063", "A2064", "C2617"):
                 sets[id(nd)] = inter
             else:
                 sets[id(nd)] = set.union(*child_sets); changes += 1
-    # 前序赋值, 记录变化边
+    # pre-order assignment; record the change edges
     assign = {}
     root_set = sets[id(tree.root)]
     assign[id(tree.root)] = sorted(root_set)[0] if root_set else None
@@ -116,7 +117,7 @@ for name in ("A2063", "A2064", "C2617"):
                 if len(cs) == 1:
                     edges.append((nd, c, ps, sorted(cs)[0]))
                 else:
-                    changes += 1  # 多态子树: 需额外变化
+                    changes += 1  # polymorphic subtree: requires an extra change
     lines.append(f"\n## {name}（WT={W}, 突变={Mu}）\n")
     lines.append(f"- 末梢状态: WT {n_wt} / 突变 {n_mut} / 未定或缺失 {n_unk}\n")
     lines.append(f"- **Fitch 简约法（根无关）: 最小变化次数 = {changes}**\n")
@@ -129,7 +130,7 @@ for name in ("A2063", "A2064", "C2617"):
     elif changes > 1:
         lines.append(f"- {name}{Mu} 需 {changes} 次独立变化（或回复突变）\n")
 
-# --- TreeTime ML 祖先重建（粗略年代; 定年稳健性见定年报告）---
+# --- TreeTime ML ancestral reconstruction (rough dates; see the dating report for robustness) ---
 try:
     from treetime import TreeTime
     with open(os.path.join(TTDIR, "ST3_dates.csv"), encoding="utf-8-sig") as f:

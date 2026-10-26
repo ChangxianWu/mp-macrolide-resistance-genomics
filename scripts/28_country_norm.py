@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""28_country_norm.py — 国家/地区名规范化（投稿口径）
-规则（跟随 Lancet/PMCID 惯例）:
-  - Taiwan → "Taiwan, China"; China → "Mainland China"（正文/图表/表格统一; NCBI 原文保留在 S1 补充表 country 列）
-  - USA → "United States"
-  - "not applicable" → "Not specified"
-实施点: results/MY9_耐药频率_按国家.tsv 与 manuscript/tables/table1_panel.csv 的 Region 列重出,
-        其余表以 table1 为锚; 稿件 config 中正文提及处一并替换。
-输入: results/MY9_分型矩阵.tsv（原文 country 列不动）
+"""28_country_norm.py — Country/region name normalization (submission convention)
+Rules (following Lancet/PMCID conventions):
+  - Taiwan -> "Taiwan, China"; China -> "Mainland China" (unified across main text/figures/tables; raw NCBI text is retained in the country column of Supplementary Table S1)
+  - USA -> "United States"
+  - "not applicable" -> "Not specified"
+Implementation points: rewrite the Region column of the per-country resistance-frequency table under results/ and manuscript/tables/table1_panel.csv;
+        other tables are anchored to table1; mentions in the main text of the manuscript config are replaced as well.
+Input: the integrated per-genome typing matrix under results/ (the raw country column is left untouched)
 """
 import csv, os
 
@@ -20,7 +20,7 @@ def norm(c):
     return NORM.get(c, c)
 
 def disp_st(k):
-    """ST 展示命名规范化（评审 P2; 与 MY9_24 同口径）: uncertain(near X)->X-related, novel(near X)->X-novel。"""
+    """Normalize ST display names (review P2; same convention as MY9_24): uncertain(near X) -> X-related, novel(near X) -> X-novel."""
     if k.startswith("uncertain(near "):
         return k.replace("uncertain(near ", "").rstrip(")") + "-related"
     if k.startswith("novel(near "):
@@ -29,7 +29,7 @@ def disp_st(k):
 
 mat = list(csv.DictReader(open(os.path.join(RES, "MY9_分型矩阵.tsv"), encoding="utf-8-sig"), delimiter="\t"))
 
-# ---- 重出 table1_panel.csv（规范化 Region 名） ----
+# ---- Rewrite table1_panel.csv (normalized Region names) ----
 from collections import defaultdict, Counter
 import numpy as np
 by_c = defaultdict(lambda: {"n": 0, "res": 0, "wt": 0, "years": [], "st": Counter()})
@@ -66,7 +66,7 @@ with open(p, "w", encoding="utf-8-sig", newline="") as f:
     w.writerows(rows)
 print("table1 rewritten with normalized names")
 
-# ---- 重出耐药频率_按国家.tsv（规范化, 供内部一致） ----
+# ---- Rewrite the per-country frequency table (normalized, for internal consistency) ----
 by_c2 = defaultdict(lambda: [0, 0])
 for r in mat:
     c = norm(r["country"].split(":")[0].strip() or "Not specified")
@@ -81,7 +81,7 @@ with open(p2, "w", encoding="utf-8-sig", newline="") as f:
         w.writerow([c, a, b, f"{a/(a+b)*100:.3f}" if a + b else "NA"])
 print("耐药频率_按国家.tsv rewritten")
 
-# ---- 稿件 config 措辞: "in China / in Taiwan" → 规范名 ----
+# ---- Manuscript config wording: "in China / in Taiwan" -> canonical names ----
 p3 = os.path.join(BASE, "manuscript", "manuscript_config.js")
 s = open(p3, encoding="utf-8").read()
 n = 0

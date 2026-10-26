@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
-"""16_export_aln.py — 导出 TreeTime/BEAST 输入（variable-sites 比对 + 日期表）
-输入: results/coresnp/alleles/*.npy + MY9_分型矩阵.tsv + reference（M129 序列）
-输出: results/coresnp/MY9_variable_sites.aln.fasta（panel assemblies + M129 参考, 核心可变位点）
-      results/coresnp/MY9_dates.csv（tip,year）
-      results/coresnp/MY9_variable_sites_meta.tsv（位点清单: refpos, ref, alleles）
-注: 本机 treetime 不可装（镜像无兼容发行）时, 该导出供任何可联网环境直接运行:
+"""16_export_aln.py — export TreeTime/BEAST inputs (variable-sites alignment + date table)
+Input: results/coresnp/alleles/*.npy + the integrated per-genome typing matrix under results/ + reference (M129 sequence)
+Output: results/coresnp/MY9_variable_sites.aln.fasta (panel assemblies + M129 reference, core variable sites)
+      results/coresnp/MY9_dates.csv (tip,year)
+      results/coresnp/MY9_variable_sites_meta.tsv (site list: refpos, ref, alleles)
+Note: when treetime cannot be installed locally (no compatible distribution in the mirror), this
+    export lets any networked environment run it directly:
     treetime --tree MY9_coreSNP_NJ.nwk --aln MY9_variable_sites.aln.fasta --dates MY9_dates.csv
 """
 import csv, glob, os, re

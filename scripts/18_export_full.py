@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""18_export_full.py — TreeTime 正式定年输入：全核心比对 + ST3 子树三件套
-输出: results/coresnp/treetime/full_core.aln.fasta（528 株 + M129, core 742,308 位点）
-      results/coresnp/treetime/MY9_coreSNP_NJ.nwk（重建, 与 MY9_15 同算法/同输入）
-      results/coresnp/treetime/full_dates.csv
-      results/coresnp/treetime/ST3_subtree.nwk / ST3.aln.fasta / ST3_dates.csv
-幂等: full_core.aln.fasta 与 NJ 重建已存在时跳过（重跑只补 ST3 部分）。
-全部树操作用显式栈迭代——二叉 NJ 树 ~1055 节点, 递归会爆栈。
+"""18_export_full.py — TreeTime formal dating inputs: full core alignment + the ST3 subtree trio
+Outputs: results/coresnp/treetime/full_core.aln.fasta (528 strains + M129, core 742,308 sites)
+         results/coresnp/treetime/MY9_coreSNP_NJ.nwk (rebuilt, same algorithm/input as MY9_15)
+         results/coresnp/treetime/full_dates.csv
+         results/coresnp/treetime/ST3_subtree.nwk / ST3.aln.fasta / ST3_dates.csv
+Idempotent: skips when full_core.aln.fasta and the NJ reconstruction already exist (a rerun only fills in the ST3 part).
+All tree operations use explicit-stack iteration — the binary NJ tree has ~1055 nodes and recursion would overflow the stack.
 """
 import csv, glob, os, re, time
 import numpy as np
@@ -59,7 +59,7 @@ if not os.path.exists(os.path.join(TD, "full_core.aln.fasta")):
 else:
     print("full_core.aln.fasta already present -> skip", flush=True)
 
-# ---- NJ 树重建（同 MY9_15 算法/输入 → 拓扑一致）----
+# ---- NJ tree reconstruction (same algorithm/input as MY9_15 -> identical topology) ----
 lines = open(os.path.join(CS, "MY9_SNP距离.phylip"), encoding="utf-8").read().strip().splitlines()
 nk = int(lines[0])
 accs_d = [ln.split("\t")[0] for ln in lines[1:]]
@@ -105,7 +105,7 @@ br[root] = [(a, dab / 2), (b, dab / 2)]
 print(f"NJ rebuilt in {time.time()-t0:.0f}s", flush=True)
 
 def build_newick(node):
-    # 迭代后序: 叶 -> 名; 内部 -> (子1,子2)
+    # Iterative post-order: leaf -> name; internal -> (child1,child2)
     out = {}
     stack = [(node, False)]
     while stack:
@@ -135,7 +135,7 @@ with open(os.path.join(TD, "full_dates.csv"), "w", encoding="utf-8-sig", newline
         if y.isdigit():
             w.writerow([a, y])
 
-# ---- ST3 MRCA：一次性自底向上求每节点子树内 ST3 叶数, 再自顶向下走 ----
+# ---- ST3 MRCA: one bottom-up pass to count ST3 leaves per node subtree, then walk top-down ----
 st3_set = set(i for i, a in enumerate(accs) if mat.get(a, {}).get("MLST_ST") == "3")
 total_st3 = len(st3_set)
 print(f"ST3 leaves: {total_st3}", flush=True)
@@ -165,9 +165,9 @@ while True:
     mrca = kids[0][0]
 print("ST3 MRCA node:", mrca, flush=True)
 
-# ---- ST3 子树剪枝（迭代, 含单枝折叠）----
+# ---- ST3 subtree pruning (iterative, including single-branch collapse) ----
 def prune(mr, seen=None):
-    """返回 (剪枝后 newick 片段, 有效末端枝长, 叶数)"""
+    """Return (pruned newick fragment, effective terminal branch length, leaf count)"""
     seen = set()
     out = {}
     stack = [(mr, 0.0, False)]

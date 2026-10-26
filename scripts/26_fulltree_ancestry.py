@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""26_fulltree_ancestry.py — 全树剪枝面板（528 tips）A2063 Fitch 祖先重建
-此前只在 ST3 子树内重建, 覆盖不了 P1 type2 等耐药株 → 全基因组获得次数未评估
-状态: 每株 site2063 (A/G/T/C/缺失), 直接取自 results/MY9_分型矩阵.tsv
-树: results/coresnp/MY9_coreSNP_NJ.nwk (528 tips)
-输出: results/coresnp/MY9_全树祖先重建.md + 台账 CSV
+"""26_fulltree_ancestry.py — A2063 Fitch ancestral reconstruction on the pruned full-tree panel (528 tips)
+Previously reconstructed only within the ST3 subtree, which could not cover resistant strains such as P1 type2 -> genome-wide gain counts were never assessed
+State: site2063 per strain (A/G/T/C/missing), taken directly from the integrated per-genome typing matrix under results/
+Tree: results/coresnp/MY9_coreSNP_NJ.nwk (528 tips)
+Output: the whole-tree ancestral-reconstruction report (Markdown) under results/coresnp/ plus a ledger CSV
 """
 import csv, os
 from Bio import Phylo
@@ -23,7 +23,7 @@ for t in tips:
     state[t.name] = s
     t.name = t.name.strip()
 
-# Fitch: 自底向上集合 + 变化计数; 变化边定位（显式栈, 无递归风险）
+# Fitch: bottom-up sets + change counting; change-edge localization (explicit stack, no recursion risk)
 post = list(tree.find_clades(order="postorder"))
 sets = {}
 changes = 0
@@ -42,7 +42,7 @@ for nd in post:
         else:
             sets[id(nd)] = set.union(*cs)
             changes += 1
-# 前序赋值 + 记录变化边
+# Preorder assignment + record the change edges
 assign = {}
 root_set = sets[id(tree.root)]
 assign[id(tree.root)] = "G" if "G" in root_set else sorted(root_set)[0]
@@ -72,7 +72,7 @@ for par, ch, a, b, cs in edges:
     lines.append(f"- 变化边 {a}→{b}: 下游末梢 {len(d)}（其中 G {len(dres)}）\n")
     lines.append(f"  - 该支构成: ST " + str(Counter(mat.get(x, {}).get('MLST_ST', '?') or 'novel' for x in d).most_common(4)) +
                  "; P1 " + str(Counter(mat.get(x, {}).get('P1_type', '?') for x in d).most_common(3)) + "\n")
-# 每条 gain 支下游 G 计入账目
+# Count the downstream G tips of every gain branch in the ledger
 gains = [(ch, a, b) for _, ch, a, b, _ in edges if b == "G"]
 tot_gain = sum(len([x for x in ch.get_terminals() if state.get(x) == "G"]) for ch, _, _ in gains)
 lines.append(f"\n- 获得边（→G）{len(gains)} 条; 其下游 G 末梢合计 = {tot_gain} / {tipc.get('G', 0)}\n")

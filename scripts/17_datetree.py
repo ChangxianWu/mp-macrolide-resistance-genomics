@@ -1,11 +1,15 @@
 # -*- coding: utf-8 -*-
-"""17_datetree.py — 数据驱动定根的 root-to-tip 定年（TempEst/RRT 式, 纯本地）
-输入: results/coresnp/MY9_SNP距离.phylip（替换/位点）+ MY9_分型矩阵.tsv
-输出: results/coresnp/MY9_定年报告.md + 控制台
+"""17_datetree.py — data-driven rooting for root-to-tip dating (TempEst/RRT style, fully local)
+Input: the core-SNP distance matrix (PHYLIP, substitutions/site) under results/coresnp/
+      + the integrated per-genome typing matrix under results/
+Output: the dating report (Markdown) under results/coresnp/ + console
 
-方法: 目标群 → NJ 子树（无根）→ 扫描每条边上的定根位置（粗扫 1/4·1/2·3/4 + 最优边细化）
-      → 取 root-to-tip 回归 R² 最大的根 → 报告: 斜率(SNP/年), R², 根日期(回归零点 = 该群样本 MRCA 估计)。
-      与免根成对回归互为印证; 真正的贝叶斯定年（BEAST2）可后续在服务器抽检。
+Methods: target group → NJ subtree (unrooted) → scan the rooting position along every edge (coarse
+      scan at 1/4·1/2·3/4 + refinement on the best edge)
+      → take the root maximizing the root-to-tip regression R² → report: slope (SNP/year), R², root
+      date (the regression zero point = MRCA estimate of the group's samples).
+      Mutually corroborated by the root-free pairwise regression; a real Bayesian dating (BEAST2) can
+      be spot-checked later on a server.
 """
 import csv, os, collections
 import numpy as np
@@ -81,8 +85,8 @@ def bfs_depths(adj, src, blocked=None):
     return dist
 
 def best_root_rtt(tips, years, br):
-    """无根树上的最优定根 root-to-tip。tips: 叶节点 id 集; years: 叶→年份。
-    返回 (best_R2, slope_SNP_per_year, root_date, best_edge, best_frac)"""
+    """Optimal root-to-tip rooting on an unrooted tree. tips: set of leaf node ids; years: leaf→year.
+    Returns (best_R2, slope_SNP_per_year, root_date, best_edge, best_frac)"""
     adj = adjacency(br)
     leaves = [nd for nd in adj if nd in years]
     best = None
@@ -116,14 +120,14 @@ def best_root_rtt(tips, years, br):
                 sxy = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
                 syy = sum((y - my) ** 2 for y in ys)
                 slope0 = sxy / sxx
-                if slope0 <= 0:      # 只接受正时钟（负斜率=反时钟, 生物上不可能）
+                if slope0 <= 0:      # accept only a forward clock (negative slope = reverse clock, biologically impossible)
                     continue
                 r2 = sxy * sxy / (sxx * syy) if syy > 0 else 0.0
                 if best is None or r2 > best[0]:
                     a = my - slope0 * mx
                     root_date = -a / slope0 if slope0 != 0 else float("nan")
                     best = (r2, slope0, root_date, (u, v, w), f)
-    # 细化最优边
+    # Refine the best edge
     if best:
         r2b, _, _, (u, v, w), _ = best
         comp_u = bfs_depths(adj, u, blocked=v)
@@ -154,7 +158,7 @@ def analyze(group_name, pred):
     if len(sub) < 15:
         return f"- {group_name}: n={len(sub)}, 跳过"
     br, name = nj(sub)
-    # 叶节点 → 年份
+    # Leaf node → year
     years = {}
     for nd, nm in name.items():
         if nm is not None and br.get(nd):
