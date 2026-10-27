@@ -2,7 +2,7 @@
 
 Analysis code accompanying the manuscript:
 
-> **One Genomic-Similarity Cluster Carries Most Macrolide Resistance–Associated
+> **A 25-SNP Genomic-Similarity Group Carries Most Macrolide Resistance–Associated
 > Genotypes in Public *Mycoplasma pneumoniae* Genomes, 1944–2025**
 > Changxian Wu, Min Wang, Fan Liu, Xiaoman Zheng, Hong Su
 > (manuscript in preparation)
