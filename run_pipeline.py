@@ -64,6 +64,7 @@ STAGES: list[tuple[str, list[tuple[str, list[str]]]]] = [
         ("26_fulltree_ancestry.py", []),
         ("32_tree_perturbation_fitch.py", []),
         ("33_cluster_substructure.py", []),
+        ("35_group_jackknife.py", []),
     ]),
     ("08_normalization", [
         ("28_country_norm.py", []),

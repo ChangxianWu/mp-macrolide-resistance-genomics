@@ -92,6 +92,7 @@ python scripts/23_epidemic_clade.py
 python scripts/26_fulltree_ancestry.py
 python scripts/32_tree_perturbation_fitch.py
 python scripts/33_cluster_substructure.py
+python scripts/35_group_jackknife.py
 ```
 
 Produces the 25-SNP single-linkage group (352 assemblies), within-group
